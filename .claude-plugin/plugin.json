@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
+  "name": "booster-skills",
+  "version": "0.1.0",
+  "description": "Booster AI domain pack for Claude Code: 7 skills covering stack conventions (Zod, Biome, OTel, Logger), Cloud Run deploy patterns, GLEC v3.0 carbon calculation, empty-leg matching algorithm, incident response, architecture orchestration, and Cloud Run service scaffolding. Plus 6 audit sub-agents for codebase analysis. Companion to agent-rigor for the Booster AI logistics platform on Google Cloud.",
+  "author": {
+    "name": "Felipe Vicencio",
+    "email": "dev@boosterchile.com"
+  },
+  "homepage": "https://github.com/boosterchile/booster-skills",
+  "repository": "https://github.com/boosterchile/booster-skills",
+  "license": "MIT",
+  "keywords": [
+    "booster",
+    "logistics",
+    "cloud-run",
+    "gcp",
+    "google-cloud",
+    "carbon-calculation",
+    "glec",
+    "empty-leg-matching",
+    "domain-skills",
+    "stack-conventions",
+    "zod",
+    "biome",
+    "opentelemetry",
+    "incident-response"
+  ]
+}

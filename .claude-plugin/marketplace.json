@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
+  "name": "booster-skills",
+  "description": "Booster AI domain pack marketplace. Single-plugin marketplace by boosterchile.",
+  "owner": {
+    "name": "Felipe Vicencio",
+    "email": "dev@boosterchile.com"
+  },
+  "plugins": [
+    {
+      "name": "booster-skills",
+      "description": "Booster AI domain + stack + audit pack. Companion to agent-rigor.",
+      "source": "./"
+    }
+  ]
+}
