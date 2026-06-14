@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] — 2026-06-14
+
+### Added
+
+#### 2 Skills (rescue from agent-rigor, redesigned as content)
+
+- **`definicion-de-terminado`** — NEW. Definition of Done + anti-rationalization standard (Spanish). Replaces agent-rigor's keyword-taboo "no MVP / cero deuda" (which was enforced by a broken hook) with a verifiable bar. Attacks the real failure mode: declaring "done" without evidence and patching symptoms instead of root cause. Complements `superpowers:verification-before-completion` and `superpowers:test-driven-development`.
+- **`tdd-dominio-critico`** — NEW. Fixes WHERE TDD is non-negotiable in Booster (DTE/SII, carta de porte, factoring, pricing, GLEC, matching, DB migrations, auth), delegating the red-green-refactor mechanics to `superpowers:test-driven-development`.
+
+#### Observational ledger + weekly scorecard (rescue of agent-rigor mechanism #2)
+
+- **`hooks/`** — `session-start.sh` (bootstrap ledger), `log-event.sh` (PostToolUse: Write/Edit/MultiEdit/Read/Task), `stop.sh` (turn summary), `lib-ledger.sh` (shared helpers). Registered via `hooks/hooks.json`.
+- **`benchmark/score-week.sh`** — weekly observational scorecard (artifacts by kind, test:source ratio, subagent invocations, skill reads, commits). No gates, no pass/fail threshold.
+- **`tests/ledger.bats`** — 8 tests covering the hooks and scorecard.
+
+### Changed
+
+- `plugin.json` / `marketplace.json`: version 0.1.0 → 0.2.0; description 7 → 9 skills + ledger; **"Companion to agent-rigor" → "Companion to superpowers"**.
+
+### Notes
+
+- **Capa 1 de disciplina migrada de `agent-rigor` a `superpowers`** (ver ADR-051 en booster-ai). Este plugin deja de ser companion de agent-rigor.
+- **El ledger es observacional, sin gates** (ningún hook hace `exit 2`), corrigiendo los dos defectos que volvieron ficción al original de agent-rigor: el gate "leíste CLAUDE.md" era código muerto (PostToolUse no cableaba `Read`) y el escape valve anti-drift hacía deadlock. Aquí `Read` y `Task` están correctamente cableados y nada bloquea.
+- **Límites honestos del ledger**: mide lo observable (archivos, ratio test:source, subagentes, lecturas, commits). No mide comprensión del contrato ni intención de drift — eso no es observable sin teatro.
+
+
 ## [0.1.0] — 2026-05-20
 
 ### Added
@@ -45,5 +71,6 @@ Initial release of `booster-skills` plugin for Claude Code.
 
 Each migrated file documents its changes from the original in the version bump notes within the YAML frontmatter (`version: 1.1.0`). Full migration report available in `docs/migration-from-booster-ai-repo.md` (the spec that produced this release).
 
-[Unreleased]: https://github.com/boosterchile/booster-skills/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/boosterchile/booster-skills/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/boosterchile/booster-skills/releases/tag/v0.2.0
 [0.1.0]: https://github.com/boosterchile/booster-skills/releases/tag/v0.1.0
