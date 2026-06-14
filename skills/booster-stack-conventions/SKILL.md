@@ -179,6 +179,13 @@ $ curl -X POST https://staging.booster-ai.com/api/trips ...
 
 Sin sección Evidencia, el PR no se mergea.
 
+### 7. ADR compliance (plegado de code-reviewer, ADR-060)
+
+Antes de cerrar cualquier cambio no trivial:
+- ¿El cambio respeta los ADRs vigentes? (no contradice decisiones cerradas)
+- ¿Introduce una decisión arquitectónica nueva que debería tener su propio ADR? (nueva dependencia major, patrón que aplica a múltiples módulos, desvío de ADR-001). Si sí → PARÁ y escribí el ADR primero.
+- ¿El PR referencia los ADRs relevantes en su sección Evidencia?
+
 ## Anti-rationalizations
 
 | Tentación | Por qué es error |
@@ -201,6 +208,7 @@ Sin sección Evidencia, el PR no se mergea.
 - [ ] Coverage 80%+ en código tocado
 - [ ] Commits Conventional con scope correcto
 - [ ] PR tiene sección Evidencia completa
+- [ ] ADR-compliance verificado (respeta ADRs vigentes; decisión nueva tiene ADR)
 - [ ] `pnpm ci` pasa en CI (lint + typecheck + test + coverage + build)
 
 ## Cuando algo no cuadra

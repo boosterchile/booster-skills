@@ -1,6 +1,6 @@
 ---
 name: security-scanner
-description: Auditoría de seguridad estática Booster AI — secrets, JWT, SQL injection, CORS, env handling, OWASP Top 10. Read-only.
+description: Auditoría de seguridad estática + compliance Chile para Booster AI — secrets, JWT, SQL injection, CORS, env handling, OWASP Top 10, MÁS Ley 19.628 (PII), Ley 21.600, SII/DTE (retención 6 años, retention lock, firma KMS), RBAC por rol (shipper/carrier/driver/admin/stakeholder) y consent ESG. Read-only.
 tools: Read, Grep, Glob, Bash
 model: sonnet
 ---
@@ -103,6 +103,43 @@ Si hay auth JWT en `apps/api/`:
 
 Al finalizar, invocar el comando nativo `/security-review` sobre módulos de auth/input crítico identificados como complemento.
 
+### 13. Autorización por rol (RBAC Booster)
+
+- ¿Cada endpoint verifica permisos según rol (shipper / carrier / driver / admin / stakeholder)?
+- ¿RBAC respeta los `scopes` otorgados al Sustainability Stakeholder (acceso read-only consent-based)?
+- ¿No hay "backdoors" de admin que salten authz?
+- ¿Hay tests de autorización (usuario X no puede acceder a recurso de usuario Y)?
+
+### 14. Data handling — Ley 19.628 (datos personales)
+
+- ¿PII identificada y marcada?
+- ¿Logs redactan PII automáticamente (Pino serializers en `packages/logger`)?
+- ¿Consentimiento explícito para processing no-esencial?
+- ¿Sustainability Stakeholders acceden solo dentro de su `scope` otorgado?
+- ¿Las consultas de stakeholders quedan registradas en `stakeholder_access_log`?
+
+### 15. Compliance SII + Chile (documentos tributarios)
+
+- Documentos DTE con Object Retention Lock en Cloud Storage (retención 6 años).
+- Hash SHA-256 por documento + firma digital con KMS (CRC32C verificado).
+- Logs de emisión de DTE completos para auditoría SII.
+- Datos de usuarios no-chilenos tratados según su jurisdicción (GDPR equivalente).
+
+### 16. Criptografía
+
+- Sin crypto hand-rolled (usar `crypto` stdlib + libs auditadas).
+- Algoritmos modernos (AES-256-GCM, SHA-256+, Ed25519). Sin MD5/SHA-1 para integridad.
+- Customer-Managed Keys (CMEK) para datos sensibles.
+
+## Anti-rationalizations (compliance)
+
+| Dicen | Respuesta |
+|-------|-----------|
+| "Es interno, no necesita auth" | BLOQUEAR. Hoy interno, mañana llamado desde un servicio comprometido. |
+| "El rate limiting lo agregamos después" | BLOQUEAR. Endpoint sin rate limit = DoS esperando ocurrir. |
+| "El user ID viene del token, no valido scope" | Validar scope ≠ validar identidad. Bloquear hasta revisar. |
+| "La dependencia no tiene CVE pública" | Revisar igual — mantenedores, popularidad, licencia. |
+
 ## Salida esperada
 
 Archivo `audit-outputs/03_SECURITY_FINDINGS.md` con:
@@ -120,3 +157,10 @@ Cada finding con: `ruta:línea`, categoría, evidencia (sin secrets en cleartext
 - **NUNCA** reproducir valores de secrets en cleartext en ningún output.
 - Si detectas un secret cuya validación requiere ver el valor, reportar P0 indicando "valor redactado por SESSION_CLAUDE.md §Manejo de secrets" y dejar que el revisor humano lo inspeccione manualmente.
 - Solo lectura. Sin `git commit`, `pnpm install`, etc.
+
+## Referencias
+
+- Ley 19.628 (datos personales, Chile): https://bcn.cl/2fsho
+- ADR-007 — gestión documental Chile (DTE, retención SII 6 años).
+- ADR-004 §Sustainability Stakeholder — modelo Uber-like + rol ESG consent-based.
+- ADR-034 — stakeholder organizations.

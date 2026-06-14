@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] — 2026-06-14
+
+Consolidación de los 3 sub-agents locales que quedaban en `agents/` del repo `booster-ai` (huérfanos tras el retiro de `agent-rigor` en ADR-060). Sin duplicar lo que `superpowers` y este plugin ya cubren. Resultado: 6 → **7 audit sub-agents**.
+
+### Added
+
+- **`agents/sre-oncall.md`** — NEW sub-agent. Revisor SRE **pre-merge** (observabilidad, rollback readiness, SLOs, capacity, costos GCP, dependencias externas con timeout/retry/circuit-breaker, compliance operacional). Distinto de la skill `incident-response` (que actúa *durante* un incidente). Portado del override local de `booster-ai`.
+- **`security-scanner`** — extendido con **compliance Chile** (secciones 13–16 + anti-rationalizations + referencias): RBAC por rol (shipper/carrier/driver/admin/stakeholder), Ley 19.628 (PII + `stakeholder_access_log`), SII/DTE (Object Retention Lock, hash SHA-256 + firma KMS), criptografía (CMEK, sin MD5/SHA-1). Absorbe el contenido único de `agents/security-auditor.md` de `booster-ai`. El contenido OWASP/secrets/SQLi existente (tareas 1–12) se conserva intacto.
+- **`booster-stack-conventions`** — nuevo paso **7. ADR compliance** en Core Process + checkbox en Exit criteria. Pliega el único bit único de `agents/code-reviewer.md` de `booster-ai` (review genérico ya lo cubre `superpowers:subagent-driven-development`).
+
+### Changed
+
+- `plugin.json` / `marketplace.json`: version 0.2.0 → 0.3.0; description "6 audit sub-agents" → "7 audit sub-agents (security-scanner con compliance Chile, + sre-oncall pre-merge)".
+- `README.md`: reframe `agent-rigor` → `superpowers` (companion + tabla de responsabilidades); corrige conteos a 9 skills / 7 sub-agents; añade fila `sre-oncall` y v0.3.0.
+
+### Notes
+
+- **Cierra la consolidación** trackeada en `.specs/_followups/migrate-booster-agents-to-plugin-v0.2.0.md` de `booster-ai`. Tras este release, el repo `booster-ai` borra los 3 overrides locales (`agents/`).
+- **Decisiones del PO (2026-06-14)**: extender `security-scanner` (un solo agente de seguridad, menos superficie); retirar `code-reviewer` plegando solo el chequeo ADR; traer `sre-oncall` como sub-agent nuevo. NO se recrea `code-reviewer` (review genérico = superpowers) ni se crea un agente de compliance separado.
+
 ## [0.2.0] — 2026-06-14
 
 ### Added
@@ -71,6 +91,7 @@ Initial release of `booster-skills` plugin for Claude Code.
 
 Each migrated file documents its changes from the original in the version bump notes within the YAML frontmatter (`version: 1.1.0`). Full migration report available in `docs/migration-from-booster-ai-repo.md` (the spec that produced this release).
 
-[Unreleased]: https://github.com/boosterchile/booster-skills/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/boosterchile/booster-skills/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/boosterchile/booster-skills/releases/tag/v0.3.0
 [0.2.0]: https://github.com/boosterchile/booster-skills/releases/tag/v0.2.0
 [0.1.0]: https://github.com/boosterchile/booster-skills/releases/tag/v0.1.0
