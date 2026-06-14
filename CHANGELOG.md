@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] — 2026-06-14
+
+Primer **slash command** del plugin. `/audit-completo` orquesta los 7 audit sub-agents en una auditoría READ-ONLY y sintetiza un roadmap priorizado P0/P1/P2, sin modificar código.
+
+### Added
+
+- **`commands/audit-completo.md`** — NEW slash command `/audit-completo [all | security | deps | perf | debt | sre | arch]` (default `all`). Despacha en paralelo `explore-architecture`, `security-scanner`, `dependency-auditor`, `performance-analyzer`, `tech-debt-detector`, `sre-oncall` y consolida con `refactor-advisor`. Entregables: `audit-outputs/*.md`, `.specs/revision-completa-<fecha>/review.md` y un stub en `.specs/_followups/` por cada P0. READ-ONLY: diagnóstico, no fixes. Marca áreas CONGELADAS / legalmente vinculantes (ej. `factoring-v1.0-cl-*`) sin proponer edits directos.
+
+### Changed
+
+- `plugin.json` / `marketplace.json`: version 0.3.0 → 0.4.0; description "+1 slash command /audit-completo".
+
 ## [0.3.0] — 2026-06-14
 
 Consolidación de los 3 sub-agents locales que quedaban en `agents/` del repo `booster-ai` (huérfanos tras el retiro de `agent-rigor` en ADR-060). Sin duplicar lo que `superpowers` y este plugin ya cubren. Resultado: 6 → **7 audit sub-agents**.
