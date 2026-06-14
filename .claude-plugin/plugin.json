@@ -1,8 +1,8 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "booster-skills",
-  "version": "0.3.0",
-  "description": "Booster AI domain pack for Claude Code: 9 skills (stack conventions, Cloud Run deploy, GLEC v3.0 carbon, empty-leg matching, incident response, architecture orchestration, Cloud Run scaffolding, definicion-de-terminado, tdd-dominio-critico), 7 audit sub-agents (security-scanner con compliance Chile, + sre-oncall pre-merge), and an observational ledger + weekly scorecard (SessionStart/PostToolUse/Stop hooks, no gates). Companion to superpowers for the Booster AI logistics platform on Google Cloud.",
+  "version": "0.4.0",
+  "description": "Booster AI domain pack for Claude Code: 9 skills (stack conventions, Cloud Run deploy, GLEC v3.0 carbon, empty-leg matching, incident response, architecture orchestration, Cloud Run scaffolding, definicion-de-terminado, tdd-dominio-critico), 7 audit sub-agents (security-scanner con compliance Chile, + sre-oncall pre-merge), an observational ledger + weekly scorecard (SessionStart/PostToolUse/Stop hooks, no gates), +1 slash command /audit-completo. Companion to superpowers for the Booster AI logistics platform on Google Cloud.",
   "author": {
     "name": "Felipe Vicencio",
     "email": "dev@boosterchile.com"

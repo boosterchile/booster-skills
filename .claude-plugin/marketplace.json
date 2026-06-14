@@ -9,9 +9,9 @@
   "plugins": [
     {
       "name": "booster-skills",
-      "description": "Booster AI domain + stack + audit pack + observational ledger. Companion to superpowers.",
+      "description": "Booster AI domain + stack + audit pack + observational ledger + slash command /audit-completo. Companion to superpowers.",
       "source": "./",
-      "version": "0.3.0"
+      "version": "0.4.0"
     }
   ]
 }
