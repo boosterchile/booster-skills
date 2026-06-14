@@ -11,7 +11,7 @@
       "name": "booster-skills",
       "description": "Booster AI domain + stack + audit pack + observational ledger. Companion to superpowers.",
       "source": "./",
-      "version": "0.2.0"
+      "version": "0.3.0"
     }
   ]
 }

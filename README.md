@@ -1,14 +1,14 @@
 # booster-skills
 
-**Booster AI domain pack for Claude Code.** Companion to `agent-rigor`.
+**Booster AI domain pack for Claude Code.** Companion to `superpowers`.
 
-Senior-engineering discipline (`agent-rigor`) provides the cycle: Define → Plan → Build → Verify → Review → Ship. This plugin provides the **domain knowledge, stack conventions, deploy workflow, and audit sub-agents** specific to the Booster AI logistics platform on Google Cloud.
+Senior-engineering discipline (`superpowers`) provides the generic cycle: brainstorming → spec/plan → TDD → verification-before-completion → subagent-driven review. This plugin provides the **domain knowledge, stack conventions, deploy workflow, audit sub-agents, and an observational ledger** specific to the Booster AI logistics platform on Google Cloud. (Hasta v0.2.0 era companion de `agent-rigor`, retirado en ADR-060.)
 
 ---
 
 ## Contenido
 
-### 7 Skills
+### 9 Skills
 
 | Skill | Cuándo se activa |
 |---|---|
@@ -19,8 +19,10 @@ Senior-engineering discipline (`agent-rigor`) provides the cycle: Define → Pla
 | `incident-response` | Cuando algo falla en producción: detectar → estabilizar → entender |
 | `booster-stack-conventions` | Cada vez que se escribe código TS/test/endpoint/schema/log en el proyecto Booster |
 | `booster-deploy-cloud-run` | Deploy de servicios Booster (Cloud Build staging → manual approval prod → monitoreo 2h) |
+| `definicion-de-terminado` | Estándar de Definición de Terminado anti-parches (antes de declarar listo / commitear / abrir PR) |
+| `tdd-dominio-critico` | TDD obligatorio en dominio crítico (DTE/SII, factoring, pricing, GLEC, matching, migraciones, auth) |
 
-### 6 Sub-agents (auditoría arquitectónica)
+### 7 Sub-agents (auditoría arquitectónica)
 
 | Agent | Modelo | Propósito |
 |---|---|---|
@@ -28,8 +30,9 @@ Senior-engineering discipline (`agent-rigor`) provides the cycle: Define → Pla
 | `explore-architecture` | haiku | Exploración top-down de la arquitectura de un codebase |
 | `performance-analyzer` | sonnet | Análisis de rendimiento (bottlenecks, N+1, latencia, bundle size) |
 | `refactor-advisor` | opus | Síntesis transversal y priorización (consume outputs de los otros 5) |
-| `security-scanner` | sonnet | Escanear superficie de seguridad (auth, secrets, IAM, headers, OWASP) |
+| `security-scanner` | sonnet | Seguridad estática (auth, secrets, IAM, headers, OWASP) **+ compliance Chile** (Ley 19.628, SII/DTE, RBAC por rol, consent ESG) |
 | `tech-debt-detector` | haiku | Detectar deuda técnica (any, ts-ignore, TODOs, localhost, mocks, console) |
+| `sre-oncall` | sonnet | Revisor SRE **pre-merge** (observabilidad, rollback, SLO, capacity, costos, deps externas) |
 
 ---
 
@@ -75,13 +78,14 @@ Use the refactor-advisor agent to synthesize audit-outputs/
 
 ---
 
-## Integración con agent-rigor
+## Integración con superpowers
 
-Este plugin asume que `agent-rigor` está instalado y activo:
+Este plugin es **companion de `superpowers`** (capa de disciplina genérica). Hasta v0.2.0 fue companion de `agent-rigor`, retirado en ADR-060 (su gate bash de enforcement no era operativo de facto). Instalar ambos:
 
 ```bash
-/plugin marketplace add boosterchile/best-skill-claude
-/plugin install agent-rigor@agent-rigor
+/plugin install superpowers@claude-plugins-official
+/plugin marketplace add boosterchile/booster-skills
+/plugin install booster-skills@booster-skills
 /plugin list   # debe mostrar AMBOS plugins habilitados
 ```
 
@@ -89,19 +93,19 @@ Distribución de responsabilidades:
 
 | Responsabilidad | Plugin |
 |---|---|
-| Ciclo Define → Plan → Build → Verify → Review → Ship | `agent-rigor` |
-| Comandos `/agent-rigor:*` (spec, plan, build, test, review, ship, design, code-simplify, benchmark) | `agent-rigor` |
-| Enforcement hooks (anti-racionalización, ciclo forzado) | `agent-rigor` |
-| Sub-agents del ciclo (code-reviewer, devils-advocate, security-auditor, test-engineer, ux-designer) | `agent-rigor` |
-| Session ledger en `.claude/ledger/<sessionId>.jsonl` | `agent-rigor` |
-| 22 skills numeradas (00-using-this-pack a 64-shipping-and-launch) | `agent-rigor` |
+| Brainstorming → spec → plan → build → verify → review | `superpowers` |
+| TDD iron-law + verificación antes de declarar terminado | `superpowers` |
+| Subagent-driven-development (review de spec + calidad por tarea) | `superpowers` |
+| Estándar de Terminado anti-parches (Definición de Terminado) | `booster-skills` (skill `definicion-de-terminado`) |
+| TDD obligatorio en dominio crítico (DTE, factoring, pricing…) | `booster-skills` (skill `tdd-dominio-critico`) |
 | Stack Booster (Zod, Biome, Logger, OTel, coverage 80%) | `booster-skills` (este plugin) |
 | Dominio Booster (carbon GLEC, empty-leg matching) | `booster-skills` |
 | Deploy Booster (Cloud Run + Cloud Build + monitoreo 2h) | `booster-skills` |
-| Sub-agents de auditoría arquitectónica | `booster-skills` (6 sub-agents) |
+| Sub-agents de auditoría + SRE pre-merge | `booster-skills` (7 sub-agents) |
 | Orquestación cross-cutting (arquitecto-maestro) | `booster-skills` |
+| Ledger observacional + scorecard semanal (sin gates) | `booster-skills` (hooks) |
 
-Path canónico de specs: `.specs/<feature-slug>/{idea,spec,plan,verify,review,ship}.md` (definido por agent-rigor).
+Path canónico de specs: `.specs/<feature-slug>/{spec,plan,verify,review,ship}.md` (convención del proyecto Booster; ya no la impone un hook).
 
 ---
 
@@ -147,6 +151,8 @@ Cinco principios:
 
 Semantic Versioning. Ver [CHANGELOG.md](CHANGELOG.md).
 
+- v0.3.0 (2026-06): Consolidación de overrides locales de `booster-ai`. `security-scanner` extendido con compliance Chile, nuevo sub-agent `sre-oncall`, ADR-compliance plegado en `booster-stack-conventions`. 9 skills + 7 audit sub-agents.
+- v0.2.0 (2026-06): Rescate de disciplina post-ADR-060. +2 skills (`definicion-de-terminado`, `tdd-dominio-critico`) + ledger observacional. Companion pasa de `agent-rigor` a `superpowers`.
 - v0.1.0 (2026-05): Initial release. 7 skills (5 migradas del repo Booster + 2 nuevas) + 6 audit sub-agents migrados.
 
 ---
