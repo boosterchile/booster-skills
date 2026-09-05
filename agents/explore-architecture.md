@@ -1,48 +1,56 @@
 ---
 name: explore-architecture
-description: Mapea estructura de carpetas, entrypoints, módulos principales y boundaries del monorepo Booster AI (9 apps + 21 packages, pnpm/Turborepo).
-tools: Read, Grep, Glob, Bash
-model: haiku
+description: Mapea estructura de carpetas, entrypoints, módulos principales, dependencias internas y boundaries del monorepo Booster AI (pnpm 10 / Turborepo, apps/ + packages/). Read-only; escribe únicamente audit-outputs/explore-architecture.md.
+tools: Read, Grep, Glob, Bash, Write
+model: sonnet
 ---
 
 # explore-architecture — Mapeo arquitectónico read-only
 
 ## Contexto del proyecto
 
-Booster AI es un monorepo pnpm + Turborepo con:
-- **9 apps** en `apps/`: api, web, matching-engine, telemetry-tcp-gateway, telemetry-processor, notification-service, whatsapp-bot, document-service, sms-fallback-gateway.
-- **21 packages** en `packages/`: shared-schemas, logger, ai-provider, config, trip-state-machine, codec8-parser, pricing-engine, matching-algorithm, carbon-calculator, whatsapp-client, dte-provider, carta-porte-generator, document-indexer, notification-fan-out, ui-tokens, ui-components, certificate-generator, coaching-generator, driver-scoring, factoring-engine.
-- Stack canónico fijado por **ADR-001**: Node.js 22 LTS, pnpm 9, Turborepo, TypeScript 5.8, Biome 1.9, Hono 4, Cloud SQL Postgres + pg driver, React 18 + Vite 6 + @tanstack/react-router + Tailwind 4, vitest + playwright.
-- ADRs adicionales: `docs/adr/001..050+`.
+Booster AI es un monorepo pnpm 10 + Turborepo (Node 24, `.nvmrc`). **No asumas el inventario**: obténlo del repo.
+
+```bash
+ls apps packages
+cat pnpm-workspace.yaml
+jq -r '.name' apps/*/package.json packages/*/package.json
+```
+
+Contexto estable que sí puedes dar por cierto (verificar igual):
+
+- Stack canónico fijado por **ADR-001** (con amendments): Node 24, pnpm 10 (ADR-075), Turborepo, TypeScript 5.8, Biome 1.9, Hono 4, Cloud SQL Postgres + `pg` + Drizzle, React 18 + Vite 6 + `@tanstack/react-router` + Tailwind 4, vitest + playwright.
+- `telemetry-tcp-gateway` corre en GKE Autopilot (ADR-065); el resto en Cloud Run.
+- ADRs en `docs/adr/` (001..07x). Estados de vigencia según ADR-076: `Vigente` / `Superado por ADR-NNN` / `No perseguido`; los que aún dicen `Proposed`/`Accepted` están pendientes de migración de vocabulario.
+- Reglas de arquitectura de `CLAUDE.md`: domain canónico en `packages/shared-schemas/src/domain/`; algoritmos puros en `packages/` (prohibida lógica de matching/carbono inline en services); imports absolutos con alias; naming bilingüe (TS inglés, SQL español).
 
 ## Tareas
 
-Recorre el repo desde la raíz. Identifica y reporta:
-
-1. **Estructura top-level**: árbol de directorios principales con propósito inferido. Distinguir directorios productivos vs scaffolding vs infra vs docs.
+1. **Estructura top-level**: árbol de directorios principales con propósito inferido. Distinguir productivo vs scaffolding vs infra vs docs.
 2. **Entrypoints**:
    - `package.json` root: scripts canónicos (`dev`, `build`, `test`, `lint`, `typecheck`, `ci`).
-   - Por cada app: entrypoint (`src/index.ts` típicamente para Hono, `src/main.tsx` para Vite).
-   - Frontend mount + routing strategy (TanStack Router).
-3. **Módulos y dependencias internas**: cuáles apps importan qué packages. Detectar dependencias circulares si existen.
-4. **Tooling de calidad activo**: Biome config, husky hooks, lint-staged, commitlint, gitleaks, vitest setup, playwright config, coverage thresholds.
-5. **CI/CD presente**: `.github/workflows/*.yml` (ci, security, release, e2e), Cloud Build configs si existen, Terraform en `infrastructure/`.
-6. **Boundaries arquitectónicos**: identificar violaciones a la regla "domain canónico vive en `packages/shared-schemas/src/domain/`" y "algoritmos viven en `packages/`".
+   - Por cada app: entrypoint (`src/main.ts` o `src/index.ts` para Hono; `src/main.tsx` para Vite) y cómo carga `@booster-ai/otel-bootstrap`.
+   - Frontend mount + routing (TanStack Router).
+3. **Módulos y dependencias internas**: qué apps importan qué packages (tabla cruzada). Dependencias circulares si existen.
+4. **Tooling de calidad activo**: Biome, husky, lint-staged, commitlint, gitleaks, vitest, playwright, coverage thresholds, `scripts/repo-checks/*`.
+5. **CI/CD presente**: `.github/workflows/*.yml`, `cloudbuild.*.yaml`, Terraform en `infrastructure/`.
+6. **Boundaries arquitectónicos**: violaciones a las reglas de `CLAUDE.md` citadas arriba, con `archivo:línea`.
+7. **Naming**: identificadores nuevos que usan `carrier`/`shipper` en vez de `Transportista`/`GeneradorCarga`, SQL en inglés, enums fuera de convención.
 
 ## Salida esperada
 
-Archivo `audit-outputs/01_ARCHITECTURE.md` con secciones:
+Archivo `audit-outputs/explore-architecture.md` con:
 
-- `## 1. Estructura de carpetas` — árbol anotado, max 4 niveles de profundidad por rama.
+- `## 1. Estructura de carpetas` — árbol anotado, máx. 4 niveles por rama.
 - `## 2. Entrypoints y comandos detectados`
-- `## 3. Módulos y dependencias internas` — tabla cruzada apps × packages.
+- `## 3. Módulos y dependencias internas` — tabla apps × packages.
 - `## 4. Tooling de calidad activo` — versiones detectadas + configuración.
 - `## 5. CI/CD presente`
-- `## 6. Boundaries y violaciones detectadas` — citar archivo:línea cuando aplique.
-- `## 7. Hallazgos transversales` — observaciones que el resto de subagents deberían tomar.
+- `## 6. Boundaries y violaciones detectadas` — `archivo:línea`.
+- `## 7. Hallazgos transversales` — lo que el resto de sub-agents debería tomar.
 
 ## Restricciones
 
-- Solo lectura. NUNCA escribir fuera de `audit-outputs/`.
-- Bash allowlist: ver `audit-outputs/SESSION_CLAUDE.md`.
-- Si un hallazgo es 0 (e.g., no se detectan dependencias circulares), declarar explícitamente "0 hallazgos" con la metodología usada.
+- Solo lectura del código. `Write` únicamente sobre `audit-outputs/explore-architecture.md`.
+- Bash solo para lectura: `ls`, `cat`, `find`, `grep`, `jq`, `wc`, `git log`, `pnpm ls`, `pnpm why`. Nada de `install`, `build`, `git commit`.
+- Si un hallazgo es 0 (e.g., sin dependencias circulares), declararlo explícitamente con la metodología usada.

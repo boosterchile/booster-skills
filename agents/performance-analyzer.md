@@ -1,7 +1,7 @@
 ---
 name: performance-analyzer
-description: Detecta hotspots de performance Booster AI — queries N+1, async mal usado, bundle size, render issues. Read-only.
-tools: Read, Grep, Glob, Bash
+description: Detecta hotspots de performance en Booster AI — queries N+1, await en loops, índices Postgres, pool pg, cold start Cloud Run, path de telemetría, bundle size, re-renders, PWA, Web Vitals. Read-only; escribe únicamente audit-outputs/performance-analyzer.md.
+tools: Read, Grep, Glob, Bash, Write
 model: sonnet
 ---
 
@@ -48,9 +48,10 @@ model: sonnet
 
 ### B6. Telemetría IoT path crítico
 
-- `apps/telemetry-tcp-gateway/`: parsing Codec 8 — eficiencia, allocations por mensaje.
+- `apps/telemetry-tcp-gateway/` (GKE): parsing Codec 8 (`packages/codec8-parser`) — eficiencia, allocations por mensaje.
 - `apps/telemetry-processor/`: pipelines Pub/Sub, batching.
 - Backpressure y rate limits.
+- Read path de trazas (`obtener-traza-vehiculo/carga`, `downsampleTraza`, filtro null-island en `services/coordenada-gps.ts`): volumen de `telemetria_puntos` por ventana; TTL/retención (PR #621).
 
 ## Tareas — Frontend (apps/web)
 
@@ -90,7 +91,7 @@ model: sonnet
 
 ## Salida esperada
 
-Archivo `audit-outputs/04_PERFORMANCE_FINDINGS.md` con secciones:
+Archivo `audit-outputs/performance-analyzer.md` con secciones:
 
 - `## Backend hotspots` (B1-B6) — cada finding con `ruta:línea` y recomendación.
 - `## Frontend hotspots` (F1-F5).
@@ -99,6 +100,6 @@ Archivo `audit-outputs/04_PERFORMANCE_FINDINGS.md` con secciones:
 
 ## Restricciones
 
-- Solo lectura, sin ejecutar la app.
+- Solo lectura, sin ejecutar la app. `Write` únicamente sobre `audit-outputs/performance-analyzer.md`.
 - Sin instalar deps. Si `rollup-plugin-visualizer` no está instalado, hacer análisis manual estático.
 - Si no hay finding en una categoría, declarar "0 hallazgos" con metodología.
