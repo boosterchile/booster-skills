@@ -1,8 +1,8 @@
 # booster-skills
 
-**Booster AI domain pack for Claude Code.** Companion to `superpowers`.
+**Booster AI domain pack for Claude Code.**
 
-Senior-engineering discipline (`superpowers`) provides the generic cycle: brainstorming → spec/plan → TDD → verification-before-completion → subagent-driven review. This plugin provides the **domain knowledge, stack conventions, deploy workflow, audit sub-agents, and an observational ledger** specific to the Booster AI logistics platform on Google Cloud. (Hasta v0.2.0 era companion de `agent-rigor`, retirado en ADR-060.)
+Paquete de **conocimiento de dominio** para el monorepo `booster-ai`: convenciones del stack, flujo de deploy real, dominio (GLEC, matching, documentos), respuesta a incidentes y 7 sub-agents de auditoría. Desde ADR-072 (2026-07-06) la **disciplina normativa vive inline en el `CLAUDE.md` de `booster-ai`** + CI/pre-commit + gates de GitHub; este plugin es apoyo opcional y ninguna regla del contrato delega su cumplimiento aquí. Si un skill contradice `CLAUDE.md`, gana `CLAUDE.md`. (Historia: companion de `agent-rigor` hasta v0.2.0, ADR-060; companion de `superpowers` hasta v0.4.0.)
 
 ---
 
@@ -12,27 +12,33 @@ Senior-engineering discipline (`superpowers`) provides the generic cycle: brains
 
 | Skill | Cuándo se activa |
 |---|---|
-| `arquitecto-maestro` | Misiones complejas que cruzan múltiples apps/packages, requieren ADR, o combinan dimensiones architecture/security/performance/compliance |
-| `adding-cloud-run-service` | Crear un nuevo servicio Cloud Run desde cero con observabilidad + seguridad + ops-readiness desde day 0 |
-| `carbon-calculation-glec` | Cálculos GLEC v3.0 + GHG Protocol; factores de emisión; certificados ESG |
-| `empty-leg-matching` | Matching algoritmo carriers-CargoRequest; scoring transparente y auditable |
+| `arquitecto-maestro` | Misiones que cruzan más de una app/package, requieren ADR, combinan dimensiones o tocan archivos protegidos; produce `.specs/<slug>/spec.md` para aprobación del PO |
+| `adding-cloud-run-service` | Crear un servicio Cloud Run nuevo con observabilidad + seguridad + ops-readiness desde day 0 |
+| `carbon-calculation-glec` | Cálculo GLEC v3.0 + GHG Protocol; factores de emisión; degradación explícita; certificados ESG |
+| `empty-leg-matching` | Algoritmo de matching carga ↔ transportista; scoring transparente, determinístico y auditable |
 | `incident-response` | Cuando algo falla en producción: detectar → estabilizar → entender |
-| `booster-stack-conventions` | Cada vez que se escribe código TS/test/endpoint/schema/log en el proyecto Booster |
-| `booster-deploy-cloud-run` | Deploy de servicios Booster (Cloud Build staging → manual approval prod → monitoreo 2h) |
-| `definicion-de-terminado` | Estándar de Definición de Terminado anti-parches (antes de declarar listo / commitear / abrir PR) |
-| `tdd-dominio-critico` | TDD obligatorio en dominio crítico (DTE/SII, factoring, pricing, GLEC, matching, migraciones, auth) |
+| `booster-stack-conventions` | Al escribir o revisar código TS/test/endpoint/schema/log/commit/PR en `booster-ai` |
+| `booster-deploy-cloud-run` | Deploy a prod (`gh workflow run release.yml` → gate humano → canary 1 %/30 min → 100 % → monitoreo 2 h); rollback |
+| `definicion-de-terminado` | Antes de declarar listo / commitear / abrir PR; anti-parches (material extendido de `CLAUDE.md` §Ciclo 4) |
+| `tdd-dominio-critico` | Dónde el TDD con rojo exhibido es obligatorio (documentos de terceros, factoring, pricing, GLEC, matching, certificados, migraciones, auth) |
 
 ### 7 Sub-agents (auditoría arquitectónica)
 
+Todos son read-only sobre el código y escriben su reporte en `audit-outputs/<agent>.md`.
+
 | Agent | Modelo | Propósito |
 |---|---|---|
-| `dependency-auditor` | haiku | Auditar dependencias (pnpm audit, licencias, vulnerabilities) |
-| `explore-architecture` | haiku | Exploración top-down de la arquitectura de un codebase |
-| `performance-analyzer` | sonnet | Análisis de rendimiento (bottlenecks, N+1, latencia, bundle size) |
-| `refactor-advisor` | opus | Síntesis transversal y priorización (consume outputs de los otros 5) |
-| `security-scanner` | sonnet | Seguridad estática (auth, secrets, IAM, headers, OWASP) **+ compliance Chile** (Ley 19.628, SII/DTE, RBAC por rol, consent ESG) |
-| `tech-debt-detector` | haiku | Detectar deuda técnica (any, ts-ignore, TODOs, localhost, mocks, console) |
+| `dependency-auditor` | haiku | Dependencias (pnpm audit, drift, security pins de `pnpm-workspace.yaml`, stack ADR-001/075) |
+| `explore-architecture` | sonnet | Mapa top-down del monorepo, dependencias internas, boundaries, naming |
+| `performance-analyzer` | sonnet | Rendimiento (N+1, índices, pool, cold start, telemetría, bundle, Web Vitals) |
+| `refactor-advisor` | opus | Síntesis transversal y priorización (consume los otros 6 reportes) |
+| `security-scanner` | sonnet | Seguridad estática (auth, secrets, IAM, headers, OWASP) **+ compliance Chile** (Ley 19.628/21.719, documentos de terceros ADR-069/070, RBAC por rol, consent ESG) |
+| `tech-debt-detector` | haiku | Deuda técnica (any, ts-ignore, TODOs sin issue, localhost, mocks, console, catch silenciosos) |
 | `sre-oncall` | sonnet | Revisor SRE **pre-merge** (observabilidad, rollback, SLO, capacity, costos, deps externas) |
+
+### 1 Slash command
+
+`/audit-completo [all | security | deps | perf | debt | sre | arch]` — despacha los sub-agents en paralelo y sintetiza con `refactor-advisor`. READ-ONLY.
 
 ---
 
@@ -78,34 +84,23 @@ Use the refactor-advisor agent to synthesize audit-outputs/
 
 ---
 
-## Integración con superpowers
+## Relación con `CLAUDE.md` y con `superpowers`
 
-Este plugin es **companion de `superpowers`** (capa de disciplina genérica). Hasta v0.2.0 fue companion de `agent-rigor`, retirado en ADR-060 (su gate bash de enforcement no era operativo de facto). Instalar ambos:
+Desde ADR-072 la distribución es:
 
-```bash
-/plugin install superpowers@claude-plugins-official
-/plugin marketplace add boosterchile/booster-skills
-/plugin install booster-skills@booster-skills
-/plugin list   # debe mostrar AMBOS plugins habilitados
-```
-
-Distribución de responsabilidades:
-
-| Responsabilidad | Plugin |
+| Responsabilidad | Dónde vive |
 |---|---|
-| Brainstorming → spec → plan → build → verify → review | `superpowers` |
-| TDD iron-law + verificación antes de declarar terminado | `superpowers` |
-| Subagent-driven-development (review de spec + calidad por tarea) | `superpowers` |
-| Estándar de Terminado anti-parches (Definición de Terminado) | `booster-skills` (skill `definicion-de-terminado`) |
-| TDD obligatorio en dominio crítico (DTE, factoring, pricing…) | `booster-skills` (skill `tdd-dominio-critico`) |
-| Stack Booster (Zod, Biome, Logger, OTel, coverage 80%) | `booster-skills` (este plugin) |
-| Dominio Booster (carbon GLEC, empty-leg matching) | `booster-skills` |
-| Deploy Booster (Cloud Run + Cloud Build + monitoreo 2h) | `booster-skills` |
-| Sub-agents de auditoría + SRE pre-merge | `booster-skills` (7 sub-agents) |
-| Orquestación cross-cutting (arquitecto-maestro) | `booster-skills` |
-| Ledger observacional + scorecard semanal (sin gates) | `booster-skills` (hooks) |
+| Frontera de decisiones, un frente por vez, spec antes de construir, TDD con rojo exhibido, terminado = evidencia fresca, reglas duras del stack, naming, PRs y deploy | **`CLAUDE.md` de `booster-ai`** (normativo) + CI/pre-commit + gates de GitHub |
+| Ciclo genérico brainstorming → plan → ejecución → verificación → review por subagente | `superpowers` (refuerzo opcional; los skills de este plugin lo invocan solo si está instalado) |
+| Ejemplos, patrones y checklists del stack Booster | `booster-skills` (`booster-stack-conventions`, `definicion-de-terminado`, `tdd-dominio-critico`) |
+| Dominio Booster (carbono GLEC, matching, documentos de terceros) | `booster-skills` |
+| Flujo de deploy real y rollback | `booster-skills` (`booster-deploy-cloud-run`) |
+| Sub-agents de auditoría + SRE pre-merge + `/audit-completo` | `booster-skills` |
+| Orquestación cross-cutting (`arquitecto-maestro`) | `booster-skills` |
 
-Path canónico de specs: `.specs/<feature-slug>/{spec,plan,verify,review,ship}.md` (convención del proyecto Booster; ya no la impone un hook).
+Instalación opcional de `superpowers`: `/plugin install superpowers@claude-plugins-official`.
+
+Path canónico de specs: `.specs/<slug>/{spec,plan,verify,review,ship}.md` (convención de `CLAUDE.md`). Este plugin **no registra hooks** desde v0.5.0 (el ledger observacional se retiró por ADR-072 §4: observabilidad sin consumidor).
 
 ---
 
@@ -113,21 +108,21 @@ Path canónico de specs: `.specs/<feature-slug>/{spec,plan,verify,review,ship}.m
 
 Este plugin está optimizado para el stack canónico de Booster AI:
 
-- **Runtime**: Node.js 22+
-- **Compute**: Google Cloud Run (serverless containers)
-- **Database**: Google Cloud SQL Postgres + pg driver
-- **Frontend**: React 18 + Vite 6 + TypeScript + @tanstack/react-router + Tailwind 4
-- **Package manager**: pnpm 9
+- **Runtime**: Node.js 24 (`.nvmrc`)
+- **Compute**: Google Cloud Run (8 servicios) + GKE Autopilot para el gateway TCP (ADR-065)
+- **Database**: Google Cloud SQL Postgres + pg driver + Drizzle
+- **Frontend**: React 18 + Vite 6 + TypeScript 5.8 + @tanstack/react-router + Tailwind 4
+- **Package manager**: pnpm 10 (ADR-075; overrides en `pnpm-workspace.yaml`)
 - **Monorepo**: Turborepo
 - **Linter/formatter**: Biome 1.9
 - **HTTP framework**: Hono 4
-- **ORM**: Drizzle (cuando aplica)
-- **Telemetría**: OpenTelemetry + Pino + Google Cloud Trace/Monitoring
-- **IaC**: Terraform (multi-environment)
-- **CI/CD**: Google Cloud Build
-- **Auth**: JWT Zero-Trust (per ADR-001)
+- **Telemetría**: OpenTelemetry (`@booster-ai/otel-bootstrap`) + Pino + Cloud Trace/Monitoring; Datadog solo infra/logs en GKE (ADR-071)
+- **IaC**: Terraform (plano, un solo entorno `prod`; no hay staging)
+- **CI/CD**: GitHub Actions (CI, security, `release.yml` dispatch-only) + Cloud Build con canary 1 % → 100 %
+- **Auth**: Firebase Auth / Identity Platform + JWT Zero-Trust (ADR-001)
 - **Carbon framework**: GLEC v3.0 + GHG Protocol
 - **Telemetría IoT**: Teltonika Codec 8 + Pub/Sub
+- **Documentos**: recepción y archivo de DTE de terceros con extracción TED (ADR-069/070); Booster no emite DTE
 
 Si tu proyecto usa un stack distinto, considera bifurcar este repo o crear tu propio domain pack.
 
@@ -151,6 +146,8 @@ Cinco principios:
 
 Semantic Versioning. Ver [CHANGELOG.md](CHANGELOG.md).
 
+- v0.5.0 (2026-09): Alineación al `CLAUDE.md` post-ADR-072 y al repo real (deploy sin staging, ADR-069/070, Node 24 / pnpm 10). Descripciones sin sobre-disparo para Opus/Fable. Sub-agents con `Write` a `audit-outputs/`. Hooks de ledger retirados.
+- v0.4.0 (2026-06): Slash command `/audit-completo`.
 - v0.3.0 (2026-06): Consolidación de overrides locales de `booster-ai`. `security-scanner` extendido con compliance Chile, nuevo sub-agent `sre-oncall`, ADR-compliance plegado en `booster-stack-conventions`. 9 skills + 7 audit sub-agents.
 - v0.2.0 (2026-06): Rescate de disciplina post-ADR-060. +2 skills (`definicion-de-terminado`, `tdd-dominio-critico`) + ledger observacional. Companion pasa de `agent-rigor` a `superpowers`.
 - v0.1.0 (2026-05): Initial release. 7 skills (5 migradas del repo Booster + 2 nuevas) + 6 audit sub-agents migrados.
