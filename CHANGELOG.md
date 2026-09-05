@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] — 2026-09-05
+
+Alineación del plugin al estado real de `booster-ai` (contrato `CLAUDE.md` reescrito en ADR-072, remoción de emisión DTE en ADR-069/070, pnpm 10 en ADR-075, gobernanza de operador único en ADR-076) y a las recomendaciones de prompting para Claude 4.5+/Opus/Fable. Sin cambios de comportamiento en `booster-ai`: el plugin sigue siendo conocimiento opcional.
+
+### Changed
+
+- **Descripciones de las 9 skills** reescritas sin el patrón "Make sure to use this skill any time the user mentions …" (la guía oficial documenta que los modelos recientes sobre-disparan con lenguaje enfático) y con criterios de activación objetivos. `arquitecto-maestro` deja de activarse por "más de 30 minutos" o "si dudas, califica".
+- **`booster-deploy-cloud-run`** reescrita sobre el flujo real: no existe staging (`#STAGING-ENV`); un merge a `main` no despliega; `gh workflow run release.yml --ref main` → espera `CI Success` → gate humano del Environment `production` → Cloud Build canary 1 %/30 min con `canary-verify` → 100 % → monitoreo 2 h; versionado por changesets. Incluye el gotcha de `LATEST → 100 %` sin nombre de revisión.
+- **`arquitecto-maestro`**: retiradas todas las referencias a `agent-rigor` (comandos, sesión UUID, devils-advocate, ledger manual). Fase 1 incorpora `docs/frentes-vivos.md` (tres slots) y el vocabulario de vigencia de ADR-076. Aprobación anclada a la Frontera de decisiones de `CLAUDE.md`.
+- **`tdd-dominio-critico`** y **`security-scanner`**: `packages/dte-provider` ya no existe; Booster recibe y archiva DTE de terceros (`packages/transport-documents`, `apps/document-service`). Se exige el rojo exhibido en la Evidencia del PR (`CLAUDE.md` §Ciclo 3). Retirado el requisito de Object Retention Lock (ADR-070: retención de custodia O-3).
+- **`booster-stack-conventions`**: Node 24 / pnpm 10; summary de commit en español con ejemplos en español; nueva sección de naming bilingüe (`Transportista`/`GeneradorCarga`); deuda deliberada con followup en `.specs/_followups/`, no waiver en ledger.
+- **`carbon-calculation-glec`**: factores en `src/factores/` (no `data/*.json`); persistencia en `metricas_viaje` con nombres reales del schema (`emisiones_kgco2e_reales`, `distancia_km_real`, `cobertura_pct`); regla de degradación explícita del Slot 1 (nunca `0`, nunca silencioso).
+- **`adding-cloud-run-service`**: `node:24-alpine`, Dockerfile por copia del patrón `pnpm deploy --prod --legacy` (ADR-075), infra plana en `infrastructure/compute.tf`, gateway en GKE.
+- **`empty-leg-matching`, `incident-response`, `definicion-de-terminado`**: naming bilingüe, rollback en GKE, feature flags reales, referencia a `superpowers` condicionada a que esté instalado. Enlaces relativos a `../../docs/adr/` (rotos desde el plugin) sustituidos por referencias textuales.
+- **Sub-agents**: los 7 deben escribir en `audit-outputs/` y ninguno tenía `Write`; ahora lo tienen, acotado por instrucción a `audit-outputs/<agent>.md`. Nombres de salida unificados a `<agent>.md` (los que ya existen en `booster-ai`); `refactor-advisor` consume los 6 reportes (antes 5, sin `sre-oncall`, con nombres numerados que nadie producía). `explore-architecture` pasa a `sonnet` y obtiene el inventario del repo en vez de una lista hardcodeada. `security-scanner` deja de intentar invocar `/security-review` desde un subagente. `tech-debt-detector` pierde el mecanismo `drift_justified` de `agent-rigor`. `dependency-auditor` verifica los security pins de `pnpm-workspace.yaml`.
+- **`/audit-completo`**: inventario real de packages, salida por agent, no abre frente.
+- `README.md`: reframe según ADR-072 (la disciplina vive en `CLAUDE.md`; el plugin es conocimiento opcional), stack actualizado.
+
+### Removed
+
+- **Hooks de ledger observacional** (`hooks/`, `benchmark/score-week.sh`, `tests/ledger.bats`), según ADR-072 §4: "observabilidad sin consumidor es peso muerto; si a futuro se quiere medición, se diseña con el consumidor primero". Costaban un `jq` + `shasum` por cada `Read`/`Write`/`Edit`/`Task` de cada sesión. El plugin ya no registra hooks.
+
 ## [0.4.0] — 2026-06-14
 
 Primer **slash command** del plugin. `/audit-completo` orquesta los 7 audit sub-agents en una auditoría READ-ONLY y sintetiza un roadmap priorizado P0/P1/P2, sin modificar código.
@@ -103,7 +125,9 @@ Initial release of `booster-skills` plugin for Claude Code.
 
 Each migrated file documents its changes from the original in the version bump notes within the YAML frontmatter (`version: 1.1.0`). Full migration report available in `docs/migration-from-booster-ai-repo.md` (the spec that produced this release).
 
-[Unreleased]: https://github.com/boosterchile/booster-skills/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/boosterchile/booster-skills/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/boosterchile/booster-skills/releases/tag/v0.5.0
+[0.4.0]: https://github.com/boosterchile/booster-skills/releases/tag/v0.4.0
 [0.3.0]: https://github.com/boosterchile/booster-skills/releases/tag/v0.3.0
 [0.2.0]: https://github.com/boosterchile/booster-skills/releases/tag/v0.2.0
 [0.1.0]: https://github.com/boosterchile/booster-skills/releases/tag/v0.1.0

@@ -1,13 +1,14 @@
 ---
 name: definicion-de-terminado
-description: Definición de Terminado (DoD) y estándar profesional anti-parches para Booster AI. Use this skill whenever you are about to declare a task done, complete, fixed, listo, terminado, resuelto, or are about to commit, abrir un PR, or move to the next task. Make sure to use this skill any time the user or you reach for "por ahora", "rápido", "esto basta", "lo dejo así", "un parche", "patch", "workaround", "quick fix", "lo mejoro después", "MVP", "good enough", "temporal" — OR any time you are tempted to fix a symptom instead of the root cause, skip a test, swallow an error, or claim success without running the verification. Replaces the old keyword-taboo with an explicit, testable bar. Complements superpowers:verification-before-completion and superpowers:test-driven-development with Booster's professional standard.
+description: Definición de Terminado y estándar anti-parches de Booster AI. Use when about to declare a task done, commit, open a PR, or move on; also when a fix would patch a symptom instead of the root cause, skip a test, swallow an error, or take technical debt silently. Checklist verificable con evidencia fresca; expande el punto "Terminado = evidencia fresca" de CLAUDE.md.
 ---
 
 # Skill: Definición de Terminado (anti-parches)
 
 **Categoría**: stack-discipline + quality-gate
 **Prioridad**: alta — esta skill existe porque el modo de falla #1 es declarar "listo" sin evidencia y parchear síntomas en vez de causas
-**Relacionado**: `superpowers:verification-before-completion`, `superpowers:test-driven-development`, skill `booster-stack-conventions`, `tdd-dominio-critico`
+**Norma**: `CLAUDE.md` §Ciclo de trabajo (puntos 3, 4 y 6). Esta skill es material extendido (ADR-072); si contradice al contrato, gana el contrato.
+**Relacionado**: `superpowers:verification-before-completion`, `superpowers:test-driven-development` (si `superpowers` está instalado), skills `booster-stack-conventions`, `tdd-dominio-critico`
 
 ## Por qué existe esta skill
 
@@ -29,12 +30,13 @@ Esto es verificable. "No MVP" no lo era.
 Antes de decir "listo" / commitear / abrir PR, TODOS los puntos aplicables deben estar verificados con evidencia fresca en este mensaje:
 
 - [ ] El cambio resuelve la **causa raíz**, no el síntoma. Si parcheas, está justificado por escrito y tiene issue/ADR asociado.
-- [ ] Tests escritos (o actualizados) y **vistos pasar en esta sesión** — no "deberían pasar". Para auth/dinero/datos/SII, TDD obligatorio (ver `tdd-dominio-critico`).
-- [ ] `pnpm typecheck` y `pnpm lint` corren limpio (output pegado, no "creo que pasa").
-- [ ] Sin `any`, sin `console.*`, sin secretos, sin `TODO`/`FIXME` sin issue enlazado (contrato `booster-stack-conventions`).
+- [ ] Tests escritos (o actualizados) y **vistos pasar en esta sesión** — no "deberían pasar". En dominio crítico (DTE recibidos, factoring, pricing, GLEC, matching, migraciones, auth) el test se escribió primero y **el output del rojo va en la Evidencia del PR** (`CLAUDE.md` §Ciclo 3; ver `tdd-dominio-critico`).
+- [ ] `pnpm typecheck`, `pnpm lint` y `pnpm build` corren limpio (output pegado, no "creo que pasa").
+- [ ] Sin `any`, sin `console.*`, sin secretos, sin placeholders ni `TODO`/`FIXME` sin issue enlazado (contrato `booster-stack-conventions`).
 - [ ] Errores manejados explícitamente — ningún `catch` vacío ni que traga el error sin loggear vía `@booster-ai/logger`.
-- [ ] Si tocaste un boundary: Zod valida la entrada. Si tocaste UI: checklist pre-entrega aplicada.
+- [ ] Si tocaste un boundary: Zod valida la entrada. Si tocaste UI: screenshot del estado final.
 - [ ] La evidencia (salida de tests, typecheck, curl, screenshot) está pegada, no descrita.
+- [ ] Commit + push de la rama feature, incluyendo `.specs/`. Lo no persistido se declara, no se deja pendiente en silencio.
 
 Si no puedes marcar todas: **no está terminado**. Dilo con el estado real, no con un eufemismo.
 
@@ -61,13 +63,13 @@ No estás obligado a hacer todo perfecto siempre. Estás obligado a **no ocultar
 - Pide confirmación humana antes de proceder.
 - Sin justificación trackeada, no hay corte. Reescribe la solución completa.
 
-Esto sustituye al antiguo hook que bloqueaba por palabras (y que hacía deadlock): la disciplina ahora vive en conducta verificable, no en un grep frágil.
+Tomar deuda deliberada es decisión del PO (`CLAUDE.md` §Frontera de decisiones).
 
-## Cooling-off (rescatado de agent-rigor, como práctica)
+## Cooling-off
 
-Eres dev solo: no hay segundo par de ojos humano. Antes de cerrar un `/review` o un merge de algo no trivial:
+El PO es operador único (ADR-076): no hay segundo par de ojos humano. Antes de cerrar un review o un merge de algo no trivial:
 
-- Si es posible, despacha un **subagente fresco** de review (superpowers ya lo hace en `subagent-driven-development`: revisor de spec + revisor de calidad por tarea). Un subagente fresco ES tu segundo par de ojos.
+- Si es posible, despacha un **subagente fresco** de review (`superpowers:subagent-driven-development` si está instalado; si no, un `Task` con el diff y la spec, sin el contexto de la conversación). Un subagente fresco ES tu segundo par de ojos.
 - Si el cambio es sensible (dinero, datos, SII, auth) y no hay subagente revisor, **deja reposar el cambio** (otra sesión / un descanso) antes de aprobarlo. La auto-revisión inmediata es la peor revisión.
 
 ## Cuándo NO aplicar el estándar máximo

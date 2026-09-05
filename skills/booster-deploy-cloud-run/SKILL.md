@@ -1,6 +1,6 @@
 ---
 name: booster-deploy-cloud-run
-description: Booster AI Cloud Run deployment workflow. Use this skill whenever the user wants to deploy, ship, release, promote, or roll out code from the Booster AI project to staging or production environments. Make sure to use this skill any time the user mentions Cloud Build, staging deploy, production promotion, rollback, smoke tests, or post-deploy monitoring — even when invoked indirectly through `/agent-rigor:ship`. This skill handles the Booster-specific deployment cycle (Cloud Build staging auto → manual approval prod → 2h monitoring) that complements agent-rigor's generic 12-point ship checklist.
+description: Deploy a producción de Booster AI en Cloud Run (proyecto booster-ai-494222, southamerica-west1). Use when deploying, releasing, promoting a canary, rolling back, or monitoring a Cloud Run revision of the Booster AI project. Covers the real flow — `gh workflow run release.yml` → gate humano → Cloud Build canary 1 % / 30 min → 100 % → monitoreo 2 h — and the rollback procedure. No existe staging.
 ---
 
 # Skill: Booster Deploy to Cloud Run
@@ -10,248 +10,153 @@ description: Booster AI Cloud Run deployment workflow. Use this skill whenever t
 
 ## Overview
 
-Booster AI corre como ~8 servicios Cloud Run en GCP (project `booster-ai-494222`, region `southamerica-west1`). El flujo de deploy es:
+Booster AI corre como 9 apps: 8 servicios Cloud Run + `telemetry-tcp-gateway` en GKE Autopilot (ADR-065/071), todo en el proyecto GCP `booster-ai-494222`, región `southamerica-west1`.
 
-1. **Staging automático** vía Cloud Build trigger en merge a `main`.
-2. **Smoke test staging** (manual o vía script).
-3. **Manual approval** en Cloud Build para promover a producción.
-4. **Production rollout** progresivo si feature flags.
-5. **Monitoreo 2 horas post-deploy** (error rate, latency P95, logs limpios).
+Hechos del flujo real (verificados contra `main` de `booster-ai`, 2026-09):
 
-Esta skill complementa el `/agent-rigor:ship` 12-point checklist con las especificidades del deploy Booster.
+1. **No hay staging.** La infra Terraform solo crea `prod`; el backlog `#STAGING-ENV` lo trackea. El nightly E2E (`e2e-staging.yml`) pega a prod — deuda declarada en `CLAUDE.md`.
+2. **Un merge a `main` NO despliega.** Desde 2026-07-10 `release.yml` es `workflow_dispatch`-only. El deploy se dispara a mano: `gh workflow run release.yml --ref main`.
+3. **Gate humano**: el job `deploy-production` corre bajo el GitHub Environment `production`; el PO aprueba en la UI de Actions. Antes de desplegar, el job espera el check `CI Success` del mismo SHA y aborta si CI falló.
+4. **Canary en Cloud Build** (`cloudbuild.production.yaml`): despliega la revisión con tag `canary-signup-<sha>` sin tráfico → 1 % del tráfico → duerme 30 min → `canary-verify` (error rate y p95 vía Monitoring API) → promueve a 100 % (`update-traffic --to-latest`). El job tiene `timeout-minutes: 75` por esto.
+5. **Monitoreo 2 h post-deploy** (error rate, latency P95, logs limpios).
+6. **Versionado**: lo hace `changesets` dentro de `release.yml` (`pnpm changeset version/publish`). No crear tags ni releases a mano.
+
+Aplica el contrato de `CLAUDE.md`: deploys y activaciones en prod son decisión del PO, no de Claude. Esta skill prepara, verifica y monitorea; la aprobación del gate la da el humano.
 
 ## When to Use
 
-Activar cuando:
+- El PO pide desplegar, "shipear", promover o hacer rollback en producción.
+- Se prepara un hotfix de producción.
+- Se planifica un cambio que toca infraestructura productiva (Cloud Run, Cloud SQL, Terraform).
 
-- Se ejecute `/agent-rigor:ship <feature-slug>` en proyecto Booster
-- Usuario mencione "deploy", "release", "promover a prod", "shipear", "merge to main"
-- Se prepare un hotfix de producción
-- Se ejecute un rollback
-- Se planifique un cambio que toca infraestructura productiva (Cloud Run service, Cloud SQL, etc.)
-
-**NO activar** para:
-
-- Cambios solo en branches feature (sin merge a main aún)
-- Cambios solo en documentación o tests sin lógica
-- Trabajo local (`pnpm dev`)
-- Despliegues de otros proyectos (no Booster)
+**No aplica** a: cambios en ramas feature sin merge, cambios solo de docs o tests, trabajo local (`pnpm dev`), otros proyectos.
 
 ## Core Process
 
-### 1. Pre-flight checks (antes de mergear a main)
+### 1. Pre-flight (antes del `workflow run`)
 
-Verificar todos estos puntos. Cualquier `NO` bloquea el deploy:
+Cualquier `NO` bloquea el deploy:
 
-- [ ] CI verde en el último commit del PR (lint + typecheck + test + coverage 80%+ + build)
-- [ ] `/agent-rigor:review` produjo `Approved for /ship` en `.specs/<feature>/review.md`
-- [ ] Devils-advocate pass de irreversibilidad ejecutado
-- [ ] Rollback plan documentado en `ship.md`
-- [ ] Sin secretos en código (`gitleaks` o equivalente)
-- [ ] Sin API keys nuevas sin restricciones IP/referrer en GCP
-- [ ] Sin dependencias nuevas sin `pnpm audit` clean (o issue de tracking)
-- [ ] Logs estructurados en endpoints nuevos (verificable con grep)
-- [ ] Métricas custom definidas si hay operación de negocio nueva
-- [ ] Alertas configuradas si el cambio introduce SLO nuevo
-- [ ] Si involucra migración BD: down migration probada
-- [ ] Si involucra feature flag: está OFF por default
+- [ ] `main` contiene el squash del PR y el check `CI Success` está verde en ese SHA.
+- [ ] El PR tenía sección `## Evidencia` completa (tests, lint, typecheck, build, curl/screenshots).
+- [ ] `.specs/<slug>/ship.md` existe con **plan de rollback** escrito.
+- [ ] Sin secretos en código (`pnpm security:scan` = gitleaks limpio).
+- [ ] Deps nuevas con `pnpm audit --audit-level=high --prod` en 0, o issue de tracking.
+- [ ] Endpoints nuevos tienen log estructurado + span OTel + métrica de negocio (verificable con grep).
+- [ ] Alerta configurada si el cambio introduce un SLO nuevo (`infrastructure/slo.tf`, `monitoring.tf`).
+- [ ] Si hay migración de BD: es expand-only o su rollback está probado (ADR-066). Migraciones `contract` llevan lista de verificación previa + dry-run con salida registrada (ADR-076).
+- [ ] Si hay feature flag: está OFF por default.
+- [ ] Si toca `terraform apply` en prod: plan revisado y guardado; `apply` es acción irreversible con gate de evidencia previa (ADR-076).
+- [ ] No es viernes después de las 16:00 hora Chile, salvo waiver explícito del PO y plan de sábado.
 
-### 2. Merge a main
-
-```bash
-gh pr merge <PR_NUMBER> --squash --delete-branch
-```
-
-Mensaje del commit: respeta Conventional Commits con scope. La descripción del PR (incluyendo sección Evidencia) queda en el body del squash commit.
-
-### 3. Cloud Build staging trigger (automático)
-
-Al mergear a `main`, Cloud Build dispara automáticamente:
-
-```
-trigger: booster-ai-staging
-substitutions: _ENV=staging
-```
-
-Verificar el build:
+### 2. Disparar el release
 
 ```bash
-gcloud builds list --filter="substitutions._ENV=staging" --limit=5
-gcloud builds log <BUILD_ID>
+gh workflow run release.yml --ref main
+gh run list --workflow=release.yml --limit=3      # obtener el run id
+gh run watch <RUN_ID>                              # o seguir en la UI de Actions
 ```
 
-**Si el build falla**: NO continuar al manual approval. Investigar logs, ejecutar hotfix.
+El run se detiene en el Environment `production` esperando aprobación humana. **Claude no aprueba el gate**; avisa al PO con el link del run.
 
-### 4. Smoke test staging
+### 3. Seguir el canary
 
-Antes de promover a prod, smoke test el servicio en staging:
+Durante los ~30 min del canary, verificar en paralelo:
 
 ```bash
-# Health check
-curl -fsS https://staging-api.booster-ai.com/health
-# Expected: {"status":"ok","version":"vX.Y.Z","trace_id":"..."}
+# Estado del tráfico del servicio (esperado durante canary: tag canary-signup-<sha> al 1 %)
+gcloud run services describe booster-ai-api --region=southamerica-west1 \
+  --format="yaml(status.traffic,status.latestReadyRevisionName)"
 
-# Endpoint específico del feature recién shipeado
-curl -fsS -H "Authorization: Bearer <staging_test_token>" \
-  https://staging-api.booster-ai.com/api/<endpoint-tocado>
-# Inspeccionar response
-
-# Si hay UI, abrir manualmente:
-open https://staging.booster-ai.com
-# Flujo crítico end-to-end relacionado al cambio
+# Errores de la revisión nueva
+gcloud logging read 'resource.type="cloud_run_revision" AND resource.labels.service_name="booster-ai-api" AND severity>=ERROR' \
+  --limit=50 --freshness=1h --format=json
 ```
 
-**Si el smoke test detecta regresión**: NO promover a prod. Rollback en staging vía Cloud Run revision rollback:
+**Gotcha verificado (2026-07-25)**: al promover, Cloud Run expresa el 100 % como `LATEST → 100 %` y esa entrada de `trafficStatuses` **no trae nombre de revisión**; la entrada con el tag `canary-signup-<sha>` va sin porcentaje. Un monitor que busque el % en la entrada con nombre lee `0 %` y parece canary trabado. Para confirmar promoción: `LATEST` al 100 % **y** `latestReadyRevisionName` = la revisión esperada.
+
+Si `canary-verify` falla, Cloud Build no promueve y el run termina en error: ir a Rollback (el 1 % sigue apuntando al canary hasta que se revierta).
+
+### 4. Smoke post-promoción
 
 ```bash
-gcloud run services update-traffic <SERVICE> \
-  --region=southamerica-west1 \
-  --to-revisions=<PREVIOUS_REVISION>=100
+curl -fsS https://api.booster-ai.com/health     # 200 y versión nueva
+# Endpoint o flujo tocado por el cambio: curl autenticado o verificación manual en la PWA
 ```
 
-### 5. Manual approval en Cloud Build (promoción a prod)
+### 5. Monitoreo 2 h post-deploy
 
-```bash
-# Listar builds pendientes de approval
-gcloud builds triggers list --filter="filename:cloudbuild-prod.yaml"
+Umbrales de rollback inmediato:
 
-# Aprobar en la UI de Cloud Build (recomendado, deja audit trail visible)
-open "https://console.cloud.google.com/cloud-build/builds?project=booster-ai-494222"
+- Error rate sube > 2× baseline durante > 5 min.
+- Latency P95 sube > 50 % durante > 10 min.
+- Errores nuevos en logs que no se entienden en < 30 min.
+- Alerta de Cloud Monitoring se dispara → activar skill `incident-response`.
 
-# O vía CLI
-gcloud builds approve <BUILD_ID>
-```
-
-**NO aprobar viernes después de las 16:00 hora Chile** salvo waiver explícito y plan de sábado.
-
-### 6. Production rollout
-
-Si NO hay feature flag, el deploy es atómico (Cloud Run revision swap):
-
-```bash
-gcloud run services describe <SERVICE> --region=southamerica-west1 --format="value(status.url,status.latestReadyRevisionName)"
-```
-
-Si HAY feature flag, rollout progresivo:
-
-```
-1%  → monitorear 15 min
-10% → monitorear 30 min
-50% → monitorear 30 min
-100% → monitorear 1 hora
-```
-
-Cada step verificar:
-
-- `error_rate` no sube
-- `latency_p95` no sube
-- Logs sin spike de errores nuevos
-
-### 7. Monitoreo 2h post-deploy
-
-Durante las primeras **2 horas** post-deploy, monitoreo activo:
-
-```bash
-# Error rate (debe estar dentro de baseline)
-gcloud logging read 'resource.type="cloud_run_revision" AND resource.labels.service_name="<SERVICE>" AND severity>=ERROR' \
-  --limit=50 --format=json --freshness=2h
-
-# Latency P95 (dashboard Cloud Monitoring)
-open "https://console.cloud.google.com/monitoring/dashboards/builder/<DASHBOARD_ID>?project=booster-ai-494222"
-
-# Trazas OTel con errores
-# (vía Cloud Trace UI o exporter custom)
-```
-
-Si en cualquier momento detectás:
-
-- Error rate sube >2x baseline durante >5 min → rollback inmediato
-- Latency P95 sube >50% durante >10 min → rollback inmediato
-- Aparecen errores nuevos en logs no presentes en staging → investigar; si no se entiende en <30 min → rollback
-- Alertas configuradas se disparan → seguir runbook de incidente (skill `incident-response`)
-
-### 8. Actualizar spec con evidencia de ship
-
-En `.specs/<feature-slug>/ship.md`, agregar:
+### 6. Evidencia en `ship.md`
 
 ```markdown
 ## Ship evidence
 
 - Date: 2026-MM-DDTHH:MM:SSZ
-- Version: vX.Y.Z
 - Commit SHA: <sha>
-- Cloud Run revision (staging): <revision_name>
-- Cloud Run revision (prod): <revision_name>
-- Build ID: <build_id>
-- Approver: Felipe Vicencio
-- Rollout strategy: <atomic | flag-progressive>
-- Monitoring window: 2h, completed [✓|✗]
-- Incidents during window: [none | description + link]
+- Actions run: <url del run de release.yml>
+- Cloud Run revision (prod): <revision_name>   # de latestReadyRevisionName
+- Canary: 1 % / 30 min → 100 % a las <hora UTC>
+- Migraciones aplicadas: <ids o "ninguna">
+- Approver del gate: Felipe Vicencio
+- Monitoring window: 2 h, completed [✓|✗]
+- Incidents during window: [none | descripción + link]
 ```
 
-### 9. Schedule 24h self-postmortem
+Si hubo `terraform apply`, registrar también el plan y la salida del apply.
 
-Recordatorio en 24h: tres líneas en `ship.md`:
+### 7. Postmortem de 24 h
 
-```markdown
-## 24h postmortem (filled 2026-MM-DD)
+Tres líneas en `ship.md` al día siguiente: qué funcionó, qué sorprendió, qué haría distinto. Actualizar `docs/handoff/CURRENT.md` si el deploy cerró un frente (ver `docs/frentes-vivos.md`).
 
-- **What worked**: (1 line)
-- **What surprised**: (1 line)
-- **What I'd do differently**: (1 line)
+## Rollback
+
+```bash
+# 1. Revisiones recientes
+gcloud run revisions list --service=booster-ai-api --region=southamerica-west1 --limit=10
+
+# 2. 100 % del tráfico a la revisión anterior estable
+gcloud run services update-traffic booster-ai-api \
+  --region=southamerica-west1 \
+  --to-revisions=<PREVIOUS_REVISION>=100
+
+# 3. Verificar
+curl -fsS https://api.booster-ai.com/health     # debe responder la versión anterior
+
+# 4. Migración de BD problemática: seguir ADR-066 (expand/contract; nunca DROP en caliente)
+
+# 5. Documentar en .specs/<slug>/ship.md sección "Rollback"
 ```
 
-Esto alimenta el benchmark de agent-rigor (`bash ~/.claude/plugins/.../benchmark/scripts/collect-metrics.sh`).
+Runbook específico del canary de signup: `docs/qa/signup-canary-rollback.md`.
+
+Ojo: `infrastructure/compute.tf` puede tener `traffic` en `lifecycle.ignore_changes` (`var.traffic_managed_externally`). Un `terraform apply` posterior no debe revertir el rollback; confirmar con `terraform plan` antes de aplicar.
 
 ## Anti-rationalizations
 
 | Tentación | Por qué es error |
 |---|---|
-| "Es viernes pero lo mergeo igual" | Los despliegues viernes sin on-call son la causa #1 de incidentes de fin de semana |
-| "Smoke test ya lo hice en mi máquina, no necesito staging" | Tu máquina ≠ staging ≠ prod. Tres ambientes distintos, tres comportamientos posibles |
-| "El monitoreo lo dejo para mañana" | Las primeras 2h post-deploy son críticas; mañana ya tenés sesgo de "todo está bien" |
-| "Skippeo el rollback plan, no creo que sea necesario" | El 5% de los deploys falla. El plan de rollback es lo único que evita que sea crisis |
-| "El cambio es pequeño, no necesita manual approval" | Los cambios "pequeños" son los que rompen producción más a menudo (cambios grandes tienen más review) |
-| "Promociono a prod sin monitorear staging porque hay urgencia" | La urgencia no anula la física de los sistemas; si rompe, romperá más caro |
-
-## Rollback procedure
-
-Si necesitás rollback en producción:
-
-```bash
-# 1. Identificar revisión anterior estable
-gcloud run revisions list --service=<SERVICE> --region=southamerica-west1 --limit=10
-
-# 2. Cambiar tráfico a la revisión anterior
-gcloud run services update-traffic <SERVICE> \
-  --region=southamerica-west1 \
-  --to-revisions=<PREVIOUS_REVISION>=100
-
-# 3. Verificar
-curl -fsS https://api.booster-ai.com/health
-# Debe responder con version anterior
-
-# 4. Si hay migración BD problemática:
-# (consultar runbook específico; las migrations Booster son backwards-compatible por contrato)
-
-# 5. Documentar en .specs/<feature>/ship.md sección "Rollback"
-```
+| "Es viernes pero lo despliego igual" | Sin on-call de fin de semana, un canary que falla el sábado se arregla el lunes. |
+| "El canary de 30 min es mucho, lo promuevo a mano" | El gate `canary-verify` es lo único que mira error rate y p95 antes del 100 %. |
+| "El monitoreo lo dejo para mañana" | Las primeras 2 h son donde aparecen los errores que el canary al 1 % no vio. |
+| "Skippeo el rollback plan, no creo que sea necesario" | El plan se escribe cuando no hay presión, no durante el incidente. |
+| "Es chico, no necesita gate humano" | El gate es contrato (`CLAUDE.md` §Frontera de decisiones), no una opción. |
 
 ## Exit criteria (deploy completo)
 
-- [ ] Mergeado a main con squash
-- [ ] Cloud Build staging green
-- [ ] Smoke test staging passed (curl health + flujo crítico)
-- [ ] Manual approval otorgado en Cloud Build
-- [ ] Cloud Run prod revision live (verificable con `gcloud run services describe`)
-- [ ] 2h monitoring sin incidentes
-- [ ] `ship.md` actualizado con evidence
-- [ ] Tag git creado: `git tag vX.Y.Z && git push --tags`
-- [ ] GitHub release creado: `gh release create vX.Y.Z --generate-notes`
-- [ ] 24h postmortem scheduled (recordatorio agendado)
+- [ ] Run de `release.yml` en `success`, gate aprobado por el PO.
+- [ ] `latestReadyRevisionName` = revisión esperada, `LATEST` al 100 %.
+- [ ] Migraciones esperadas aplicadas (verificado en BD, no inferido).
+- [ ] Smoke `/health` 200 + flujo tocado verificado.
+- [ ] 2 h de monitoreo sin incidentes.
+- [ ] `ship.md` con evidencia; `CURRENT.md` actualizado si cambió el estado del proyecto.
 
 ## Cuando algo no cuadra
 
-Si detectás algo raro durante el deploy (cualquier paso del 1 al 9), **PARÁ y escalá al PO**. Es mejor demorar un deploy 4 horas que arreglar una outage de 4 días.
-
-Para incidentes activos en producción, activar skill `incident-response` (también en booster-skills).
+Si algo se ve raro en cualquier paso, **detente y escala al PO** con el diagnóstico. Demorar un deploy 4 horas es más barato que una outage de 4 días. Para incidentes activos, skill `incident-response`.

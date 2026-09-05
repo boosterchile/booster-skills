@@ -1,6 +1,6 @@
 ---
 name: booster-stack-conventions
-description: Booster AI stack conventions enforcer. Use this skill whenever writing TypeScript code, tests, API endpoints, Zod schemas, structured logs, OpenTelemetry traces, or commits in the Booster AI project. Make sure to use this skill any time the user asks to implement, refactor, add, modify, or fix any code in the apps/api, apps/web, or packages/ directories — even for trivial-seeming changes — because the conventions (zero `any`, Zod in boundaries, @booster-ai/logger instead of console, OTel trace_id, coverage 80%, Conventional Commits with scope, Evidencia section in PRs) are non-negotiable contracts that prevent technical debt from accumulating.
+description: Convenciones del stack Booster AI con ejemplos concretos. Use when writing or reviewing TypeScript, tests, Hono endpoints, Zod schemas, structured logs, OTel spans, commits, or PRs in apps/ or packages/ of the Booster AI monorepo. Expands the "Reglas duras del stack" of CLAUDE.md (zero any, Zod en boundaries, @booster-ai/logger, coverage 80 %, Conventional Commits con scope, sección Evidencia, naming bilingüe) with code patterns and a closing checklist.
 ---
 
 # Skill: Booster Stack Conventions
@@ -10,9 +10,7 @@ description: Booster AI stack conventions enforcer. Use this skill whenever writ
 
 ## Overview
 
-El stack de Booster AI (Node.js 22 serverless Cloud Run + Cloud SQL + React/Vite + pnpm 9 + Biome + Hono + Drizzle + OTel) tiene convenciones no-negociables. Esta skill las hace cumplir. No es opcional: cada vez que se toca código en el proyecto Booster, estas reglas aplican.
-
-Filosofía: *"El agente quiere agradarte. Tomar atajos lo hace eficiente y útil. Tu trabajo es darle un entorno donde el atajo cueste más que el camino correcto."* — agent-rigor
+El stack de Booster AI (Node.js 24 en Cloud Run + Cloud SQL Postgres + React 18/Vite 6 + pnpm 10 + Turborepo + Biome + Hono 4 + Drizzle + OTel) tiene convenciones que son contrato (ADR-001; cambiarlas exige ADR). La norma vive en `CLAUDE.md` §Reglas duras del stack; esta skill la expande con ejemplos y una checklist de cierre. Si algo aquí contradice `CLAUDE.md`, gana `CLAUDE.md`.
 
 ## When to Use
 
@@ -30,7 +28,7 @@ Aplica a **toda escritura de código** en el proyecto Booster AI, incluyendo:
 **NO aplica** a:
 
 - Documentación pura (`.md`)
-- Cambios en infraestructura Terraform (ese tiene sus propias reglas en otro skill)
+- Infraestructura Terraform: rige `CLAUDE.md` §Archivos que NUNCA se tocan (IAM/Billing/service accounts/KMS/firewall) e `infrastructure/README.md`
 - Edición de archivos de configuración (`.env.example`, `package.json` deps, etc.)
 - Trabajo en otros proyectos (esta skill es específica de Booster AI)
 
@@ -126,23 +124,23 @@ logger.error({ err, context: 'trip_creation' }, 'Failed to create trip');
 
 Formato: `<type>(<scope>): <summary>`
 
-- `<type>`: `feat | fix | refactor | docs | test | chore | perf | style`
-- `<scope>`: dominio del cambio. Ejemplos válidos: `matching`, `telemetry`, `auth`, `web`, `api`, `infra`, `db`, `carbon`.
-- `<summary>`: en español, imperativo, ≤72 chars.
+- `<type>`: `feat | fix | refactor | docs | test | chore | perf | build | ci | revert` (commitlint lo aplica en pre-commit).
+- `<scope>`: dominio del cambio. Ejemplos válidos: `matching`, `telemetria`, `auth`, `web`, `api`, `infra`, `db`, `carbono`.
+- `<summary>`: **en español**, imperativo, ≤72 chars.
 
 ```
-✅ feat(matching): add proximity boost factor
-✅ fix(auth): refresh token rotation race condition
-✅ refactor(carbon): extract emission factors to shared package
-✅ docs(adr): add ADR-052 terraform multi-env
+✅ feat(matching): agregar factor de proximidad al scoring
+✅ fix(auth): corregir carrera en rotación del refresh token
+✅ refactor(carbono): extraer factores de emisión a package compartido
+✅ docs(adr): agregar ADR-075 migración a pnpm 10
 
-❌ feat: stuff                              (sin scope)
-❌ feat(matching) added proximity boost     (sin :, sin verbo)
-❌ fix(auth): fixed the thing               (vago)
-❌ feat(matching): Added proximity boost factor in algorithm because users asked for it (largo, en pasado)
+❌ feat: cosas                              (sin scope)
+❌ feat(matching) agregado factor           (sin :, sin verbo imperativo)
+❌ fix(auth): arreglar la cosa              (vago)
+❌ feat(matching): Se agregó el factor de proximidad al algoritmo porque los usuarios lo pidieron (largo, en pasado)
 ```
 
-**Squash merges** a `main` con mensaje claro. Nada de "WIP" o "checkpoint" llegando a main.
+**Squash merges** a `main` con mensaje claro. Nada de "WIP" o "checkpoint" llegando a main. Ramas: `feat/<slug>`, `fix/<slug>`, `chore/<slug>`. Jamás push directo a `main`.
 
 ### 6. PRs con sección Evidencia obligatoria
 
@@ -179,12 +177,20 @@ $ curl -X POST https://staging.booster-ai.com/api/trips ...
 
 Sin sección Evidencia, el PR no se mergea.
 
-### 7. ADR compliance (plegado de code-reviewer, ADR-060)
+### 7. ADR compliance
 
 Antes de cerrar cualquier cambio no trivial:
-- ¿El cambio respeta los ADRs vigentes? (no contradice decisiones cerradas)
-- ¿Introduce una decisión arquitectónica nueva que debería tener su propio ADR? (nueva dependencia major, patrón que aplica a múltiples módulos, desvío de ADR-001). Si sí → PARÁ y escribí el ADR primero.
+- ¿El cambio respeta los ADRs **vigentes**? Los ADR tienen estado de vigencia (`Vigente` / `Superado por ADR-NNN` / `No perseguido`, ADR-076); uno superado no fija nada. Los ADR no se editan: se superseden con uno nuevo.
+- ¿Introduce una decisión arquitectónica nueva que debería tener su propio ADR? (nueva dependencia major, patrón que aplica a múltiples módulos, desvío de ADR-001). Si sí, escribir el ADR primero; crearlo es decisión del PO (`CLAUDE.md` §Frontera de decisiones).
 - ¿El PR referencia los ADRs relevantes en su sección Evidencia?
+
+### 8. Naming bilingüe (contrato de `CLAUDE.md`)
+
+- Código TS en **inglés** camelCase; archivos kebab-case = export principal.
+- SQL en **español** snake_case sin tildes; enums en español snake_case (siglas internacionales exentas).
+- UI en español con tildes.
+- Entidades de dominio: `Transportista` / `GeneradorCarga`. `carrier` / `shipper` están deprecados en identificadores nuevos; solo aparecen donde ya existen.
+- Migraciones Drizzle: expand/contract (ADR-066); `check-migration-safety.mjs` lo verifica en CI.
 
 ## Anti-rationalizations
 
@@ -209,10 +215,11 @@ Antes de cerrar cualquier cambio no trivial:
 - [ ] Commits Conventional con scope correcto
 - [ ] PR tiene sección Evidencia completa
 - [ ] ADR-compliance verificado (respeta ADRs vigentes; decisión nueva tiene ADR)
-- [ ] `pnpm ci` pasa en CI (lint + typecheck + test + coverage + build)
+- [ ] Naming bilingüe respetado (TS inglés / SQL y enums español / UI español)
+- [ ] `pnpm ci` pasa (lint + typecheck + test + coverage + build), output pegado en la Evidencia
 
 ## Cuando algo no cuadra
 
-Si una de estas reglas parece bloquear progreso, **PARÁ y escalá al PO**. No improvises. Las reglas existen por razones específicas; saltearlas requiere waiver explícito documentado en `.claude/ledger/`.
+Si una de estas reglas parece bloquear progreso, detente y escala al PO con el diagnóstico. Tomar deuda deliberada es decisión del PO (`CLAUDE.md` §Frontera de decisiones): siempre con issue o stub en `.specs/_followups/` y plan de pago, nunca en silencio.
 
-Excepciones legítimas son raras. Ejemplos válidos: bug crítico en producción que requiere hotfix en <1h (waiver: hotfix-crítico, regularizar en 24h con PR de cleanup).
+Excepciones legítimas son raras. Ejemplo válido: hotfix de producción en < 1 h, regularizado en 24 h con PR de cleanup y followup trackeado.
