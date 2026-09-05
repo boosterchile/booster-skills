@@ -1,16 +1,18 @@
 ---
 name: carbon-calculation-glec
-description: Carbon footprint calculation per GLEC v3.0 Framework and GHG Protocol for Booster AI trips. Use this skill whenever the user needs to write, modify, debug, or audit carbon emission calculations, adjust emission factors (new fuels, new vehicle classes), reconcile a discrepancy between an issued ESG certificate and what the client measures, update to a new GLEC Framework version, or work on anything related to the packages/carbon-calculator library. Make sure to use this skill any time the user mentions "carbon", "emissions", "huella de carbono", "GLEC", "GHG", "Scope 1/3", "factor de emisión", "ESG certificate", "kg CO2e", "well-to-tank", or any computation that must be deterministic and re-derivable from inputs for audit purposes.
+description: Cálculo de huella de carbono por viaje según GLEC v3.0 y GHG Protocol en Booster AI. Use when writing, modifying, debugging, or auditing emission calculations in packages/carbon-calculator, adjusting emission factors, reconciling an issued ESG certificate against what the client measures, or wiring measured (CAN bus) vs modelled distance/fuel into the trip lifecycle. Fixes the determinism, auditability, and explicit-degradation rules (never 0, never silent).
 ---
 
 # Skill: Carbon Footprint Calculation (GLEC v3.0)
 
 **Categoría**: core-engineering + compliance
-**Relacionado**: ADR-004 modelo Uber-like, ADR-005 telemetría, ADR-007 documentos
+**Relacionado**: ADR-004 modelo Uber-like, ADR-005 telemetría, ADR-073 tipologías de flota / configuración GLEC, `docs/frentes-vivos.md` Slot 1 (huella punta a punta)
 
 ## Overview
 
-Booster AI calcula huella de carbono por trip según **Global Logistics Emissions Council Framework v3.0** (GLEC v3.0) y GHG Protocol. La implementación vive en `packages/carbon-calculator` como librería pura, determinística, exhaustivamente testeada. El cálculo es **auditable**: dados los mismos inputs, siempre produce el mismo output; y dada una emisión reportada, se puede re-derivar desde los inputs originales.
+Booster AI calcula huella de carbono por viaje según **Global Logistics Emissions Council Framework v3.0** (GLEC v3.0) y GHG Protocol. La implementación vive en `packages/carbon-calculator` como librería pura, determinística, exhaustivamente testeada. El cálculo es **auditable**: dados los mismos inputs, siempre produce el mismo output; y dada una emisión reportada, se puede re-derivar desde los inputs originales.
+
+**Regla de degradación (Slot 1 de `docs/frentes-vivos.md`)**: un viaje cerrado tiene `metricas_viaje.emisiones_kgco2e_reales` poblado, **o** degradación explícita registrada (`emisiones_kgco2e_reales = null` + métrica de data-quality + certificación marcada como degradada). Nunca `0`, nunca fallo silencioso. Hoy la flota puede tener 0 vehículos con CAN funcional (CURRENT.md 2026-07-25): el camino modelado no es la excepción, es el caso común.
 
 ## When to Use
 
@@ -44,16 +46,23 @@ Para cada trip, registrar **qué método se usó**. Esto se refleja en el certif
 
 ### 3. Identificar factores de emisión
 
-Los factores GLEC v3.0 son tablas publicadas que multiplican consumo/distancia por kg CO2e. Se actualizan periódicamente. Viven en `packages/carbon-calculator/data/`:
+Los factores GLEC v3.0 son tablas publicadas que multiplican consumo/distancia por kg CO2e. Se actualizan periódicamente. En el repo viven como módulos TS de datos, separados de la lógica:
 
 ```
-packages/carbon-calculator/data/
-├── glec-v3.0-fuel-factors.json       # kg CO2e / litro por tipo de combustible
-├── glec-v3.0-vehicle-intensity.json  # kg CO2e / tonne-km por vehicle class
-└── glec-v3.0-well-to-tank.json       # Scope 3 factors
+packages/carbon-calculator/src/
+├── factores/
+│   ├── sec-chile-2024.ts       # factores de combustible (fuente SEC Chile 2024)
+│   └── defaults-por-tipo.ts    # defaults por tipología de flota (ADR-073)
+├── glec/
+│   ├── factor-carga.ts         # load factor
+│   └── empty-backhaul.ts       # ajuste por retorno vacío
+├── modos/                      # modos de cálculo (medido / modelado / default)
+├── certificacion/
+├── calcular-emisiones.ts       # función pura de entrada
+└── tipos.ts
 ```
 
-**Nunca hard-codear factors en código**. Deben vivir en JSON versionado con fuente+fecha.
+Verificar el árbol real antes de editar (`ls packages/carbon-calculator/src`); esta lista es del 2026-09. **Nunca poner un factor numérico dentro de la lógica de cálculo**: todo factor vive en `src/factores/` con fuente y fecha en el nombre o en un comentario de cabecera, y el output del cálculo reporta qué factores usó.
 
 ### 4. Calcular con función pura
 
@@ -104,32 +113,26 @@ describe('calculateTripEmissions', () => {
 
 `fixtures/reference-trips.json` contiene casos publicados por el GLEC Framework (anexos técnicos) + casos propios. **Si un test falla después de cambiar la tabla de factores, NO cambiar el test — abrir conversación con Product Owner y Auditor ESG**.
 
-### 6. Rastreo en BigQuery
+### 6. Persistencia auditable
 
-Cada cálculo persiste en `bigquery: booster_esg.emissions_calculated`:
+El resultado se persiste en Cloud SQL en `metricas_viaje` (tabla 1:1 con `viajes`, Drizzle `tripMetrics` en `apps/api/src/db/schema.ts`): `emisiones_kgco2e_estimadas`, `emisiones_kgco2e_reales` (`carbonEmissionsKgco2eActual`), `distancia_km_real` (híbrida GPS + Routes API, PR #624) y `cobertura_pct`. El cálculo lo dispara `apps/api/src/services/calcular-metricas-viaje.ts`. Leer el schema antes de escribir persistencia; no asumir tablas ni columnas que no están ahí (nota: `docs/frentes-vivos.md` cita nombres en inglés que no coinciden con el schema; manda el schema).
+
+Lo que debe quedar persistido para poder re-derivar: inputs (distancia y método, carga, tipología), método de precisión, versión GLEC, versión del algoritmo y los factores usados. Si el schema actual no guarda los factores, eso es parte del trabajo, no un detalle opcional.
+
+Consulta de verificación (Slot 1 de `frentes-vivos.md`, con los nombres reales):
 
 ```sql
-CREATE TABLE emissions_calculated (
-  trip_id STRING NOT NULL,
-  calculated_at TIMESTAMP NOT NULL,
-  glec_version STRING NOT NULL,
-  precision_method STRING NOT NULL,
-  scope1_kgco2e FLOAT64 NOT NULL,
-  scope3_kgco2e FLOAT64 NOT NULL,
-  total_kgco2e FLOAT64 NOT NULL,
-  intensity FLOAT64,
-  inputs_json JSON NOT NULL,
-  factors_json JSON NOT NULL
-)
-PARTITION BY DATE(calculated_at)
-CLUSTER BY trip_id;
+SELECT v.id, m.distancia_km_real, m.emisiones_kgco2e_reales, m.emisiones_kgco2e_estimadas, m.cobertura_pct
+FROM viajes v JOIN metricas_viaje m ON m.viaje_id = v.id
+WHERE v.recogido_en IS NOT NULL AND v.entregado_en IS NOT NULL
+ORDER BY v.entregado_en DESC LIMIT 10;
 ```
 
-Para auditar: `SELECT * FROM emissions_calculated WHERE trip_id = '<id>'` devuelve el cálculo exacto + todos los factores que se usaron.
+Un backfill que re-deriva certificados ya emitidos tiene **gate del PO** (impacto legal/ESG).
 
 ### 7. Certificado ESG
 
-Al cerrar el trip, `apps/document-service` genera PDF con:
+Al cerrar el viaje, `packages/certificate-generator` (invocado desde el lifecycle de entrega en `apps/api`) genera el PDF con:
 - Resumen de emisiones
 - Método usado (EXACT_CANBUS vs MODELED vs DEFAULT)
 - Factores usados (transparencia)
@@ -158,17 +161,17 @@ El hash permite validar meses después que el certificado NO fue alterado.
 ## Exit Criteria
 
 - [ ] Cálculo vive en `packages/carbon-calculator` como función pura
-- [ ] Factors en JSON versionado con fuente GLEC + fecha
-- [ ] Test coverage ≥95% (es compliance crítico)
+- [ ] Factores en `src/factores/` con fuente + fecha; ninguno inline en la lógica
+- [ ] Test escrito primero, rojo exhibido en la Evidencia (`tdd-dominio-critico`); coverage ≥95 %
 - [ ] Tests usan fixtures con casos de referencia GLEC
-- [ ] Cálculo persiste en BigQuery con inputs + factors
+- [ ] Persistencia con inputs + método + factores, verificada contra `schema.ts`
+- [ ] Degradación explícita (`null` + métrica) cuando falta insumo; nunca `0`
 - [ ] Certificado PDF incluye hash SHA-256 + glec_version + precision_method
-- [ ] Cambios a factors revisados por Sustainability Stakeholder tipo auditor
+- [ ] Cambios a factores revisados por el PO / Sustainability Stakeholder
 
 ## Referencias
 
 - GLEC Framework v3.0: https://www.smartfreightcentre.org/en/our-programs/global-logistics-emissions-council/
 - GHG Protocol Scope 3 Standard: https://ghgprotocol.org/standards/scope-3-standard
 - ISO 14064-2: https://www.iso.org/standard/66454.html
-- [ADR-004 Modelo Uber-like](../../docs/adr/004-uber-like-model-and-roles.md) — sección Sustainability Stakeholder
-- [ADR-005 Telemetría](../../docs/adr/005-telemetry-iot.md) — CAN bus data
+- ADR-004 (modelo Uber-like, Sustainability Stakeholder), ADR-005 (telemetría, CAN bus), ADR-073 (tipologías de flota / configuración GLEC) en `docs/adr/` de `booster-ai`

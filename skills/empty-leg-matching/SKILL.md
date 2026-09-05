@@ -1,16 +1,18 @@
 ---
 name: empty-leg-matching
-description: Empty-leg matching algorithm — the heart of the Booster AI product. Use this skill whenever the user works on, debugs, or modifies anything in packages/matching-algorithm, adjusts scoring weights, adds new factors to the carrier matching model, debugs why a specific carrier did not receive an offer they expected, or implements features around CargoRequest-to-Carrier assignment. Make sure to use this skill any time the user mentions "matching", "carrier selection", "empty-leg", "scoring", "shipper-carrier dispatch", "viaje vacío", "asignación de carga", "ranking de carriers", or anything related to how Booster decides which carriers to offer a trip to — the algorithm must remain transparent, deterministic, and auditable.
+description: Algoritmo de matching de empty-legs (asignación de carga a transportistas) de Booster AI. Use when working in packages/matching-algorithm or apps/matching-engine — adjusting scoring weights or filters, adding factors, versioning the algorithm, or explaining why a given transportista did or did not receive an offer. Fixes the design rules — hard filters before scoring, deterministic tie-breaking, per-decision audit record, ADR + shadow A/B for weight changes.
 ---
 
 # Skill: Empty-Leg Matching Algorithm
 
 **Categoría**: core-engineering + iot-telemetry (dominio)
-**Relacionado**: ADR-004 modelo Uber-like, ADR-005 telemetría
+**Relacionado**: ADR-004 modelo Uber-like, ADR-005 telemetría, `tdd-dominio-critico` (TDD obligatorio en este package)
 
 ## Overview
 
-El corazón del producto: dado un `CargoRequest` abierto, identificar los carriers candidatos y puntuarlos para enviarles la oferta. El algoritmo debe ser transparente, testeable y auditable — un shipper o carrier que pregunta "por qué X carrier recibió la oferta antes que Y" debe poder recibir respuesta basada en factores objetivos.
+El corazón del producto: dada una carga abierta, identificar los transportistas candidatos y puntuarlos para enviarles la oferta. El algoritmo debe ser transparente, testeable y auditable — un generador de carga o un transportista que pregunta "por qué X recibió la oferta antes que Y" debe poder recibir respuesta basada en factores objetivos.
+
+**Sobre los nombres de este documento**: los ejemplos usan `Carrier`, `CargoRequest`, `shipper` como vocabulario conceptual. En código nuevo rige el naming de `CLAUDE.md`: TS en inglés camelCase, entidades de dominio `Transportista` / `GeneradorCarga` (carrier/shipper deprecados), SQL en español snake_case. Antes de escribir, leer los tipos reales en `packages/shared-schemas/src/domain/` y `packages/matching-algorithm/src/`; esta skill describe el diseño objetivo, no necesariamente el estado exacto del código.
 
 ## When to Use
 
@@ -91,7 +93,7 @@ Dado el ranking:
 
 ### 6. Auditabilidad obligatoria
 
-Cada ejecución del matching guarda en `matching_decisions`:
+Cada ejecución del matching persiste un registro de decisión (tabla `decisiones_matching` en Cloud SQL, naming SQL en español; si aún no existe en `apps/api/src/db/schema.ts`, crearla es parte del trabajo, con migración expand-only según ADR-066). Contenido mínimo:
 
 ```json
 {
@@ -156,7 +158,8 @@ Cada PR que cambia scoring o filtros debe:
 - Factor de scoring sin peso explícito en config
 - Cambio de pesos sin ADR
 - Tests de unidad < 95% coverage en `packages/matching-algorithm`
-- Decisión sin registro en `matching_decisions`
+- Decisión sin registro persistido
+- Lógica de matching inline en un service de `apps/` en vez de en `packages/matching-algorithm` (prohibido por `CLAUDE.md` §Arquitectura)
 
 ## Exit Criteria
 
@@ -164,13 +167,12 @@ Cada PR que cambia scoring o filtros debe:
 - [ ] Filtros duros antes del scoring
 - [ ] Scoring multifactor normalizado y ponderado
 - [ ] Empty-leg detection implementada y testeada con casos reales
-- [ ] Cada ejecución persiste en BigQuery `matching_decisions`
-- [ ] Tests con coverage ≥95% + fixtures de casos edge
+- [ ] Cada ejecución persiste su registro de decisión con breakdown
+- [ ] Tests escritos primero (rojo exhibido en la Evidencia), coverage ≥95 % + fixtures de casos edge
 - [ ] Algorithm version bumped en cada cambio
 - [ ] Shadow A/B documentado antes de rollout
 
 ## Referencias
 
-- [ADR-004 Modelo Uber-like](../../docs/adr/004-uber-like-model-and-roles.md) — matching carrier-based
-- [ADR-005 Telemetría IoT](../../docs/adr/005-telemetry-iot.md) — vehicle-availability-events
+- ADR-004 (modelo Uber-like, matching carrier-based) y ADR-005 (telemetría IoT, vehicle-availability-events) en `docs/adr/` de `booster-ai`
 - Uber's dispatch system (public overview): https://eng.uber.com/matching/

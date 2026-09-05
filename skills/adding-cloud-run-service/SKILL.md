@@ -1,16 +1,16 @@
 ---
 name: adding-cloud-run-service
-description: Scaffold a new Cloud Run service in the Booster AI monorepo with observability, security, and ops-readiness from day 0. Use this skill whenever the user wants to create a new Cloud Run service, extract a bounded context from apps/api into its own service, add a new Pub/Sub consumer that needs a dedicated runtime, or set up the directory structure, Dockerfile, Terraform module, and CI matrix for a new backend microservice. Make sure to use this skill any time the user mentions "new service", "extract context", "split apps/api", "Cloud Run scaffold", "dedicated consumer", "telemetry pipeline new component", or proposes adding a new entry to the matrix of services — the skill enforces the 11-step process that prevents day-0 tech debt.
+description: Scaffold de un servicio Cloud Run nuevo en el monorepo Booster AI con observabilidad, seguridad y ops-readiness desde day 0. Use when creating a new Cloud Run service, extracting a bounded context out of apps/api, or adding a Pub/Sub consumer that needs its own runtime — covers directory layout, Zod env parsing, Dockerfile pattern, Terraform module, CI, runbook stub. Not for adding an endpoint to an existing service or a shared package.
 ---
 
 # Skill: Adding a Cloud Run Service
 
 **Categoría**: core-engineering
-**Relacionado**: ADR-001 stack, ADR-005 telemetría, skill `incident-response`, skill `booster-stack-conventions`
+**Relacionado**: ADR-001 stack, ADR-005 telemetría, ADR-065/071 (gateway en GKE), skill `incident-response`, skill `booster-stack-conventions`
 
 ## Overview
 
-Booster AI tiene ~8 servicios Cloud Run (api, matching-engine, telemetry-processor, notification-service, whatsapp-bot, document-service, web). Añadir uno nuevo requiere seguir un proceso que garantiza observabilidad, seguridad y ops-readiness desde day 0.
+Booster AI tiene 9 apps en `apps/`: 8 en Cloud Run (api, web, matching-engine, telemetry-processor, notification-service, whatsapp-bot, document-service, sms-fallback-gateway) y `telemetry-tcp-gateway` en GKE Autopilot (conexiones TCP persistentes de Teltonika; ADR-065). Añadir un servicio nuevo requiere un proceso que garantiza observabilidad, seguridad y ops-readiness desde day 0. Crear un servicio es una decisión de arquitectura: requiere ADR y aprobación del PO (`CLAUDE.md` §Frontera de decisiones).
 
 ## When to Use
 
@@ -65,7 +65,7 @@ Desde day 0, el servicio debe importar:
 - `@booster-ai/logger` — logging estructurado Pino
 - `@booster-ai/shared-schemas` — Zod schemas
 - `@booster-ai/config` — env parsing
-- OpenTelemetry SDK + auto-instrumentation del framework (Hono)
+- `@booster-ai/otel-bootstrap` — SDK OTel cargado con `node --import` antes de `main` (exporta a Cloud Trace vía ADC, con `RedactingSpanExporter`); copiar el patrón `src/instrumentation.ts` de `apps/telemetry-tcp-gateway`
 
 ### 4. Endpoints obligatorios
 
@@ -92,36 +92,26 @@ export const config = envSchema.parse(process.env);
 
 Parse al arranque. Si falla, el servicio muere con error claro (no arranca con config inválida).
 
-### 6. Dockerfile estándar
+### 6. Dockerfile
 
-```dockerfile
-FROM node:22-alpine AS builder
-WORKDIR /app
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-COPY apps/<service>/package.json ./apps/<service>/
-COPY packages/ ./packages/
-RUN corepack enable && pnpm install --frozen-lockfile
-COPY . .
-RUN pnpm --filter @booster-ai/<service> build
+No escribir uno desde cero: **copiar `apps/api/Dockerfile`** (o `apps/whatsapp-bot/Dockerfile`, que documenta el rationale) y adaptar los `COPY` de `package.json` de los packages que el servicio importa. Invariantes del patrón vigente:
 
-FROM node:22-alpine AS runtime
-WORKDIR /app
-COPY --from=builder /app/apps/<service>/dist ./dist
-COPY --from=builder /app/apps/<service>/package.json ./
-COPY --from=builder /app/node_modules ./node_modules
-USER node
-ENV NODE_ENV=production
-EXPOSE 8080
-CMD ["node", "dist/main.js"]
-```
+- `FROM node:24-alpine` (Node 24, `.nvmrc`), `corepack enable`.
+- Stage `deps` copia solo los `package.json` de los workspaces necesarios + lockfile, luego `pnpm install --frozen-lockfile`.
+- Stage `build` compila con `pnpm --filter @booster-ai/<service> build`.
+- Runtime se arma con `pnpm --prod deploy --legacy` (pnpm 10 cambió el default; sin `--legacy` falla con `ERR_PNPM_DEPLOY_NONINJECTED_WORKSPACE`, ADR-075).
+- `USER node`, `ENV NODE_ENV=production`, `EXPOSE 8080`.
+- Cada package con deps nativas/wasm que el bundler deja como `external` necesita su `package.json` copiado en `deps` (ver comentarios F4/P2 en `apps/api/Dockerfile`).
+
+El check "Docker build + smoke" de CI construye la imagen; `pnpm ci` local **no** lo cubre. Correr `docker build` local antes del PR.
 
 ### 7. Terraform module
 
-Añadir en `infrastructure/environments/<env>/main.tf`:
+La infra es plana en `infrastructure/*.tf` (no hay `environments/<env>/`). Añadir el servicio en `infrastructure/compute.tf` usando el módulo existente:
 
 ```hcl
 module "<service_name>" {
-  source = "../../modules/cloud-run-service"
+  source = "./modules/cloud-run-service"
 
   project_id       = var.project_id
   region           = var.region
@@ -154,11 +144,7 @@ module "<service_name>" {
 
 ### 9. CI actualizado
 
-Añadir al job `ci.yml` el filter del nuevo service en el matrix:
-
-```yaml
-services: [api, web, matching-engine, telemetry-processor, <new-service>]
-```
+Leer `.github/workflows/ci.yml` y `cloudbuild.production.yaml` antes de tocar: el job de Docker build + smoke hoy cubre `api` y tiene un follow-up para el resto vía matrix. Añadir el servicio donde corresponda y verificar que `release.yml` / Cloud Build lo despliegue. Los quality gates de CI son archivos protegidos (`CLAUDE.md`): el cambio se propone al PO, no se aplica solo.
 
 ### 10. Observability config
 
@@ -212,8 +198,8 @@ Este runbook se completa a medida que el servicio madure.
 
 ## Referencias
 
-- [ADR-001 stack](../../docs/adr/001-stack-selection.md)
-- [ADR-005 telemetría](../../docs/adr/005-telemetry-iot.md)
+- ADR-001 (stack), ADR-005 (telemetría IoT), ADR-065 (gateway GKE), ADR-075 (pnpm 10, `pnpm deploy --legacy`) en `docs/adr/` de `booster-ai`
+- `infrastructure/modules/cloud-run-service/` (módulo Terraform vigente)
 - Cloud Run best practices: https://cloud.google.com/run/docs/tips/general
 - skill `booster-stack-conventions` (reglas no-negociables del stack)
 - skill `booster-deploy-cloud-run` (flow de deploy)

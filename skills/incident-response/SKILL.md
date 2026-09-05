@@ -1,6 +1,6 @@
 ---
 name: incident-response
-description: Production incident response for Booster AI. Use this skill the moment something is failing in production, when a Cloud Monitoring alert fires (error rate, latency, SLO breach), when a user reports an outage via WhatsApp/email/admin panel, when on-call detects an anomaly proactively (logs, metrics, traces), or when there is a founded suspicion of security compromise. Make sure to use this skill any time the user mentions "incident", "outage", "down", "broken in prod", "users can't", "5XX errors spiking", "latency spike", "security breach", "incidente", "se cayó", or any signal of production distress. Three disciplined phases — detect, stabilize, understand. Designed to be followable under stress without thinking.
+description: Respuesta a incidentes en producción de Booster AI. Use when something is failing in production — a Cloud Monitoring alert fires, a user reports an outage, on-call spots an anomaly in logs/metrics/traces, or there is founded suspicion of a security compromise. Three phases (detectar, estabilizar, entender) with the Cloud Run rollback and Cloud Logging queries ready to paste. Not for staging noise or reproducible non-critical bugs.
 ---
 
 # Skill: Incident Response
@@ -54,9 +54,10 @@ Usar esta tabla en el primer minuto. No sobre-pensar — si dudas, escala.
 **Objetivo: parar el dolor, no entender el porqué.**
 
 1. **Evaluar rollback inmediato**:
-   - Si hay un deploy reciente (<2h) → rollback primero, investigar después
-   - Cloud Run: `gcloud run services update-traffic <service> --to-revisions=<prev-revision>=100`
-   - Si es DB migration: evaluar down migration
+   - Si hay un deploy reciente (<2h; ver el último run de `release.yml`) → rollback primero, investigar después
+   - Cloud Run: `gcloud run services update-traffic <service> --region=southamerica-west1 --to-revisions=<prev-revision>=100`
+   - `telemetry-tcp-gateway` corre en GKE, no en Cloud Run: rollback vía `kubectl rollout undo` (ADR-065)
+   - Si es DB migration: expand/contract (ADR-066); nunca DROP en caliente
 2. **Si rollback no aplica o ya está hecho y persiste**:
    - Feature flags OFF relevantes
    - Rate limiting agresivo si es problema de capacidad
@@ -127,15 +128,14 @@ gcloud run services update-traffic <service> \
 
 ### Feature flag OFF
 
-- Si usamos feature flags con Firestore — actualizar doc directamente desde Console
-- Si usamos GrowthBook/LaunchDarkly — UI de management
+- Los flags viven en `apps/api` (`src/routes/feature-flags.ts`, `booleanFlag` de `@booster-ai/config`). Verificar ahí cómo se apaga cada uno antes de asumir un mecanismo.
 
 ### Auditoría de seguridad post-incidente
 
 Si el incidente involucró brecha de seguridad (SEV-1):
 - Rotar TODOS los secrets relacionados (procedimiento: regenerar en GCP Secret Manager → propagar a Cloud Run vía Terraform → forzar restart de revision)
 - Revisar Cloud Audit Logs por actividad anómala
-- Notificar a usuarios afectados dentro de 72h (Ley 19.628 Chile)
+- Notificar a usuarios afectados según Ley 19.628 / 21.719 (ver ADR-068 y `references/security-checklist.md` del repo para el plazo vigente)
 
 ## Exit Criteria
 
@@ -150,5 +150,6 @@ Si el incidente involucró brecha de seguridad (SEV-1):
 ## Referencias
 
 - Severity guide (Google SRE): https://sre.google/sre-book/managing-incidents/
-- Ley 19.628 Chile (notificación brechas): https://bcn.cl/2fsho
+- Ley 19.628 Chile (datos personales): https://bcn.cl/2fsho · ADR-068 (modelo de consentimiento 19.628 / 21.719)
 - skill `booster-deploy-cloud-run` (rollback procedure detallada)
+- Runbooks del repo: `docs/runbooks/`, `docs/qa/signup-canary-rollback.md`
